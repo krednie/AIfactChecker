@@ -27,12 +27,11 @@ ENV/
 !.env.example
 
 # ── Data (large binary / generated files) ─────────────────
-data/faiss.index
-data/chunk_meta.pkl
+
+
 data/scraped_corpus.jsonl
 data/*.jsonl
-data/*.pkl
-data/*.index
+
 data/*.npy
 
 # ── Node / Next.js ─────────────────────────────────────────
