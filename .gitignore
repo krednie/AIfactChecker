@@ -12,10 +12,7 @@ build/
 .Python
 
 #agent skills
-.agent/skills/ui-ux-pro-max/
-.agent/skills/ui-ux-pro-max/data/
-.agent/skills/ui-ux-pro-max/scripts/
-.agent/skills/ui-ux-pro-max/SKILL.md
+.agent/
 
 # ── Virtual Environments ───────────────────────────────────
 .venv/
@@ -89,6 +86,7 @@ scripts/test_search.py
 *.tmp
 *.bak
 tasks.md
+fact_checking_pipeline.md
 
 # ── Coverage / Testing ─────────────────────────────────────
 .coverage
