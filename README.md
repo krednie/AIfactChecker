@@ -91,7 +91,7 @@ flowchart TD
     F --> G["⚡ Parallel Async Workers<br/>asyncio.gather - all fired simultaneously"]
 
     subgraph CAG ["📦 CAG - Cache-Augmented Generation"]
-        H["📚 BM25 to FAISS<br/>2000+ fact-check articles<br/>faiss.index loaded at startup"]
+        H["📚 BM25 to FAISS<br/>countless fact-check articles<br/>faiss.index loaded at startup"]
     end
 
     subgraph RAG ["🌐 RAG - Retrieval-Augmented Generation"]
