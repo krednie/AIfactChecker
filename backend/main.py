@@ -5,6 +5,7 @@ Endpoints:
     POST /ocr         — image bytes → extracted text
     POST /analyze     — text/image → full VerificationResult[]
     GET  /health      — liveness check
+    GET  /trending    — top 5 fact-checked news headlines (loaded at startup)
 
 Pipeline on /analyze:
     OCR (if image) → translate to English → extract claims
@@ -29,7 +30,66 @@ from backend.multilingual import prepare_for_pipeline, translate_reasoning
 from backend.ocr import _get_reader
 from backend.patient0 import find_origin, OriginResult
 from backend.retriever import Retriever
-from backend.verifier import verify_claims, VerificationResult, Stance, Confidence, SourceChip
+from backend.verifier import verify_claim, verify_claims, VerificationResult, Stance, Confidence, SourceChip
+
+
+# ── Trending state ────────────────────────────────────────────────────────── #
+
+_TRENDING_HEADLINES = [
+    "AI-generated deepfakes of Indian officials spreading on social media claiming military support for Israel",
+    "Old 2016 photos of US Navy sailors being shared as Iran hostages in current Middle East conflict",
+    "Viral video claims PM Modi announced nationwide lockdown due to major security crisis",
+    "AI chatbot advice suggests replacing table salt with sodium bromide for better health",
+    "WhatsApp message claims service will start charging Rs 99 per month from next week",
+]
+
+_trending_items: list[dict] = []
+_trending_ready = False
+
+
+async def _build_trending() -> None:
+    """Fact-check top 5 news headlines in parallel at startup."""
+    global _trending_items, _trending_ready
+    try:
+        logger.info("Trending: starting parallel fact-checks…")
+        results = await asyncio.gather(
+            *[_quick_check(h) for h in _TRENDING_HEADLINES],
+            return_exceptions=True,
+        )
+        items = [r for r in results if isinstance(r, dict)]
+        _trending_items = items
+        _trending_ready = True
+        logger.success(f"Trending: {len(items)} items ready")
+    except Exception as e:
+        logger.warning(f"Trending build failed: {e}")
+        _trending_ready = True  # mark ready so endpoint doesn't hang
+
+
+async def _quick_check(headline: str) -> dict:
+    """Run a single claim through the normal verify_claim pipeline (uses DDG + GDELT internally)."""
+    claim_data = {"claim": headline, "check_worthy": True}
+    try:
+        vr = await verify_claim(claim_data)
+        stance = vr.stance.value
+        label_map = {"Supported": "TRUE", "Refuted": "FALSE", "Uncertain": "UNVERIFIED"}
+        top = vr.sources[0] if vr.sources else None
+        return {
+            "headline": headline[:120],
+            "verdict": stance,
+            "label": label_map.get(stance, "UNVERIFIED"),
+            "source": top.source if top else "web",
+            "url": top.url if top else "",
+        }
+    except Exception as e:
+        logger.warning(f"_quick_check failed for '{headline[:50]}': {e}")
+        return {
+            "headline": headline[:120],
+            "verdict": "Uncertain",
+            "label": "UNVERIFIED",
+            "source": "web",
+            "url": "",
+        }
+
 
 
 # ── Lifespan (warm up heavy models once) ──────────────────────────────────── #
@@ -38,13 +98,23 @@ from backend.verifier import verify_claims, VerificationResult, Stance, Confiden
 async def lifespan(app: FastAPI):
     logger.info("Warming up models…")
     try:
-        Retriever.get()          # loads FAISS + embedding model
+        Retriever.get()          # loads FAISS + embedding model (~500 MB)
     except FileNotFoundError:
         logger.warning("FAISS index not found — run scripts/build_index.py first")
-    try:
-        _get_reader()            # initializes EasyOCR
-    except Exception as e:
-        logger.warning(f"EasyOCR init failed: {e}")
+    # EasyOCR is NOT pre-loaded at startup to save ~700 MB RAM.
+    # It will be lazily initialised on the first /ocr or /analyze-with-image request.
+    # To pre-load it (e.g. on a high-RAM instance), set PRELOAD_OCR=true.
+    if cfg.PRELOAD_OCR:
+        try:
+            _get_reader()
+        except Exception as e:
+            logger.warning(f"EasyOCR init failed: {e}")
+    else:
+        logger.info("EasyOCR deferred — will load on first OCR request (saves ~700 MB RAM)")
+    # Trending pre-computation is opt-in (set PRELOAD_TRENDING=true).
+    # Disabled by default to avoid 5 parallel LLM calls at cold start.
+    if cfg.PRELOAD_TRENDING:
+        asyncio.create_task(_build_trending())
     logger.success("Startup complete")
     yield
     logger.info("Shutdown")
@@ -61,7 +131,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[cfg.FRONTEND_URL, "http://localhost:3000", "http://localhost:3001"],
+    # allow_origins with credentials=True cannot use "*".
+    # allow_origin_regex covers: localhost (any port) + any Chrome extension origin.
+    allow_origin_regex=r"https?://localhost(:\d+)?|chrome-extension://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -122,6 +194,19 @@ class HealthResponse(BaseModel):
     status: str
     faiss_loaded: bool
     ocr_ready: bool
+
+
+class TrendingItem(BaseModel):
+    headline: str
+    verdict: str          # "Supported" | "Refuted" | "Uncertain"
+    label: str            # short label e.g. "TRUE" | "FALSE" | "UNVERIFIED"
+    source: str           # domain of top evidence source
+    url: str              # link to top evidence source
+
+
+class TrendingResponse(BaseModel):
+    items: list[TrendingItem]
+    ready: bool
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────── #
@@ -188,6 +273,15 @@ async def health():
     except Exception:
         pass
     return HealthResponse(status="ok", faiss_loaded=faiss_ok, ocr_ready=ocr_ok)
+
+
+@app.get("/trending", response_model=TrendingResponse)
+async def trending():
+    """Return the pre-computed trending fact-checks from startup."""
+    return TrendingResponse(
+        items=[TrendingItem(**item) for item in _trending_items],
+        ready=_trending_ready,
+    )
 
 
 _MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8 MB hard limit
