@@ -76,24 +76,25 @@ Powered by **Sarvam AI**, supports Hindi, Bengali, Tamil, Telugu, Marathi, Gujar
 ### ⚡ Fully Async Pipeline
 Every I/O-bound operation — FAISS search, GDELT, Google FC, DuckDuckGo, Wayback Machine — runs in **parallel via `asyncio.gather`**. Multiple claims are verified concurrently. The entire pipeline typically completes in **8–15 seconds**.
 
+```mermaid
 flowchart TD
     A["📱 User Input<br/>(text / screenshot)"] --> RL["🛡️ Rate Limiter<br/>per-IP + per-API-key throttle"]
     RL --> RC{"⚡ Redis Cache<br/>Claim lookup"}
-    RC -->|Cache Hit <100ms| Q
+    RC -->|Cache Hit - under 100ms| Q
     RC -->|Cache Miss| B{"Image?"}
-    
+
     B -->|Yes| C["📸 EasyOCR<br/>Extract text from screenshot"]
     B -->|No| D["📝 Raw text input"]
     C --> E["🌏 Sarvam AI<br/>Detect language + translate to English"]
     D --> E
     E --> F["🔍 Groq LLM<br/>Extract atomic claims with structured queries"]
-    F --> G["⚡ Parallel Async Workers<br/>asyncio.gather — all fired simultaneously"]
+    F --> G["⚡ Parallel Async Workers<br/>asyncio.gather - all fired simultaneously"]
 
-    subgraph CAG ["📦 CAG — Cache-Augmented Generation (Pre-indexed, In-Memory)"]
-        H["📚 BM25 → FAISS<br/>2,000+ fact-check articles<br/>faiss.index loaded at startup"]
+    subgraph CAG ["📦 CAG - Cache-Augmented Generation"]
+        H["📚 BM25 to FAISS<br/>2000+ fact-check articles<br/>faiss.index loaded at startup"]
     end
 
-    subgraph RAG ["🌐 RAG — Retrieval-Augmented Generation (Live, Real-Time)"]
+    subgraph RAG ["🌐 RAG - Retrieval-Augmented Generation"]
         I["🌐 GDELT DOC 2.0<br/>Real-time global news<br/>250+ countries, 15-min lag"]
         J["✅ Google Fact Check API<br/>ClaimReview verified sources<br/>AFP, Reuters, AltNews"]
         K["🦆 DuckDuckGo<br/>Broad web fallback<br/>No API key, no rate limits"]
@@ -103,17 +104,17 @@ flowchart TD
     G --> I
     G --> J
     G --> K
-    G --> L["🕵️ Wayback Machine<br/>Origin tracing — Patient 0<br/>800B+ archived pages"]
+    G --> L["🕵️ Wayback Machine<br/>Origin tracing - Patient 0<br/>800B+ archived pages"]
 
-    H -->|corpus score < 0.45 → corpus_miss → fallback to RAG| CM["⚠️ Corpus Miss Detection<br/>Force confidence down<br/>Escalate to live sources"]
+    H -->|corpus score below 0.45 - fallback to RAG| CM["⚠️ Corpus Miss Detection<br/>Force confidence down<br/>Escalate to live sources"]
     CM --> I
 
-    H --> M["🔀 Merge + Deduplicate<br/>by URL, re-rank by score + trust tier<br/>Gov 1.5× · WHO/CDC 1.2× · FC 1.0×"]
+    H --> M["🔀 Merge and Deduplicate<br/>by URL, re-rank by score and trust tier<br/>Gov 1.5x - WHO/CDC 1.2x - FC 1.0x"]
     I --> M
     J --> M
     K --> M
 
-    M --> N["🧠 Groq LLM<br/>Stance classification<br/>(Supported / Refuted / Uncertain)"]
+    M --> N["🧠 Groq LLM<br/>Stance classification<br/>Supported / Refuted / Uncertain"]
     N --> O["📊 Confidence Calibration<br/>+ corpus miss flagging"]
     L --> P["🕐 Patient 0 Result<br/>Earliest known URL + timestamp"]
 
@@ -121,15 +122,16 @@ flowchart TD
     RW --> Q["📡 JSON API Response"]
     P --> Q
 
-    subgraph INFRA ["☁️ Infrastructure — Horizontal Scale"]
-        direction LR
+    subgraph INFRA ["☁️ Infrastructure - Horizontal Scale"]
         LB["⚖️ Load Balancer"] --> R1["🖥️ Render Instance 1<br/>Stateless FastAPI"]
         LB --> R2["🖥️ Render Instance 2<br/>Stateless FastAPI"]
         LB --> R3["🖥️ Render Instance N<br/>Auto-scaled"]
-        REDIS["🔴 Redis<br/>Shared across instances"]
-        FAISS_SHARED["📦 FAISS Index<br/>Shared volume"]
-        R1 & R2 & R3 --> REDIS
-        R1 & R2 & R3 --> FAISS_SHARED
+        R1 --> REDIS["🔴 Redis<br/>Shared across instances"]
+        R2 --> REDIS
+        R3 --> REDIS
+        R1 --> FAISS_SHARED["📦 FAISS Index<br/>Shared volume"]
+        R2 --> FAISS_SHARED
+        R3 --> FAISS_SHARED
     end
 
     style A fill:#9B7FFF,color:#fff
@@ -144,6 +146,7 @@ flowchart TD
     style CAG fill:#1a1a2e,color:#fff
     style RAG fill:#0f3460,color:#fff
     style INFRA fill:#1a1a1a,color:#fff
+```
 
 ## 🚀 Quick Start
 
