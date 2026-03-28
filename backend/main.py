@@ -98,23 +98,15 @@ async def _quick_check(headline: str) -> dict:
 async def lifespan(app: FastAPI):
     logger.info("Warming up models…")
     try:
-        Retriever.get()          # loads FAISS + embedding model (~500 MB)
+        Retriever.get()          # loads FAISS + embedding model
     except FileNotFoundError:
         logger.warning("FAISS index not found — run scripts/build_index.py first")
-    # EasyOCR is NOT pre-loaded at startup to save ~700 MB RAM.
-    # It will be lazily initialised on the first /ocr or /analyze-with-image request.
-    # To pre-load it (e.g. on a high-RAM instance), set PRELOAD_OCR=true.
-    if cfg.PRELOAD_OCR:
-        try:
-            _get_reader()
-        except Exception as e:
-            logger.warning(f"EasyOCR init failed: {e}")
-    else:
-        logger.info("EasyOCR deferred — will load on first OCR request (saves ~700 MB RAM)")
-    # Trending pre-computation is opt-in (set PRELOAD_TRENDING=true).
-    # Disabled by default to avoid 5 parallel LLM calls at cold start.
-    if cfg.PRELOAD_TRENDING:
-        asyncio.create_task(_build_trending())
+    try:
+        _get_reader()            # initializes EasyOCR
+    except Exception as e:
+        logger.warning(f"EasyOCR init failed: {e}")
+    # Fire trending fact-checks in background — doesn't block startup
+    asyncio.create_task(_build_trending())
     logger.success("Startup complete")
     yield
     logger.info("Shutdown")

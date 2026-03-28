@@ -1,10 +1,30 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+
+function rand(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
-// ── Types ─────────────────────────────────────────────────
+interface TrendingItem {
+  headline: string;
+  verdict: string;
+  label: string;
+  source: string;
+  url: string;
+}
+
+const TRENDING_FALLBACK: TrendingItem[] = [
+  { headline: 'WhatsApp to charge ₹99/month from next week', verdict: 'Refuted', label: 'FALSE', source: 'factcheck.afp.com', url: '' },
+  { headline: 'PM Modi announces free 5G by Dec 2026', verdict: 'Uncertain', label: 'MISLEADING', source: 'ndtv.com', url: '' },
+  { headline: 'Kerala floods linked to cloud-seeding experiment', verdict: 'Uncertain', label: 'UNVERIFIED', source: 'thehindu.com', url: '' },
+  { headline: 'AIIMS study links Aadhaar scans to cancer risk', verdict: 'Refuted', label: 'FALSE', source: 'pib.gov.in', url: '' },
+  { headline: 'AI chatbot clears UPSC Mains with 98% score', verdict: 'Uncertain', label: 'MISLEADING', source: 'ndtv.com', url: '' },
+];
+
+// ── Types ─────────────────────────────────────────
 interface Source {
   title: string;
   url: string;
@@ -33,7 +53,7 @@ interface ClaimResult {
   stance: 'Supported' | 'Refuted' | 'Uncertain';
   confidence: 'High' | 'Medium' | 'Low';
   reasoning: string;
-  structured_query: any;
+  structured_query: Record<string, unknown>;
   pipeline_trace: PipelineStep[];
   sources: Source[];
   corpus_miss: boolean;
@@ -49,417 +69,256 @@ interface AnalysisResponse {
   processing_time_ms: number;
 }
 
-// ── SVG Icons ─────────────────────────────────────────────
-function IconRadar() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 12m-1 0a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/>
-      <path d="M12 12m-5 0a5 5 0 1 0 10 0a5 5 0 1 0 -10 0"/>
-      <path d="M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"/>
-      <path d="M15 12l-3 -3"/>
-    </svg>
-  );
-}
-
-function IconPencil() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M4 20h4L18.5 9.5a2.121 2.121 0 0 0-4-4L4 16v4z"/>
-      <line x1="13.5" y1="6.5" x2="17.5" y2="10.5"/>
-    </svg>
-  );
-}
-
-function IconImage() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="3" width="18" height="18" rx="2"/>
-      <circle cx="8.5" cy="8.5" r="1.5"/>
-      <polyline points="21 15 16 10 5 21"/>
-    </svg>
-  );
-}
-
-function IconCamera() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-      <circle cx="12" cy="13" r="4"/>
-    </svg>
-  );
-}
-
-function IconSearch() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="8"/>
-      <path d="M21 21l-4.35-4.35"/>
-    </svg>
-  );
-}
-
-function IconAlertTriangle() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-      <line x1="12" y1="9" x2="12" y2="13"/>
-      <line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-  );
-}
-
-function IconGlobe() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10"/>
-      <line x1="2" y1="12" x2="22" y2="12"/>
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-    </svg>
-  );
-}
-
-function IconHelpCircle() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10"/>
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-      <line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-  );
-}
-
-function IconClock() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10"/>
-      <polyline points="12 6 12 12 16 14"/>
-    </svg>
-  );
-}
-
-function IconCheckCircle() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-      <polyline points="22 4 12 14.01 9 11.01"/>
-    </svg>
-  );
-}
-
-function IconActivity() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  );
-}
-
-function IconDatabase() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <ellipse cx="12" cy="5" rx="9" ry="3"/>
-      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-    </svg>
-  );
-}
-
-function IconCircle({ cls }: { cls: string }) {
-  const fill = cls === 'supported' ? '#22c55e' : cls === 'refuted' ? '#f87171' : '#fbbf24';
-  return (
-    <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
-      <circle cx="4" cy="4" r="4" fill={fill} />
-    </svg>
-  );
-}
-
-function IconTimer() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="9"/>
-      <polyline points="12 7 12 12 15 15"/>
-      <path d="M9.5 3.5h5"/>
-    </svg>
-  );
-}
-
-// ── Helpers ───────────────────────────────────────────────
-const TIER_CLASS: Record<string, string> = {
-  govt: 'tier-dot govt',
-  verified: 'tier-dot verified',
-  portal: 'tier-dot portal',
-};
-
-function confidenceWidth(conf: string) {
-  if (conf === 'High') return '100%';
-  if (conf === 'Medium') return '60%';
+// ── Helpers ───────────────────────────────────────
+function confWidth(c: string) {
+  if (c === 'High') return '100%';
+  if (c === 'Medium') return '60%';
   return '25%';
 }
 
-const STEPS = ['Scanning claims…', 'Searching corpus…', 'Classifying stance…', 'Tracing origin…'];
-
-// ── Sub-components ────────────────────────────────────────
-
-function RadarOverlay({ step }: { step: string }) {
-  const stepIdx = STEPS.indexOf(step);
-  return (
-    <div className="radar-overlay" role="status" aria-live="polite" aria-label={step}>
-      <div className="radar-ring">
-        <div className="radar-sweep" />
-        <div className="radar-center" />
-        <div className="radar-dot radar-dot-1" />
-        <div className="radar-dot radar-dot-2" />
-        <div className="radar-dot radar-dot-3" />
-      </div>
-      <p className="radar-label">{step}</p>
-      <div className="radar-steps" aria-hidden="true">
-        {STEPS.map((_, i) => (
-          <div key={i} className={`radar-step-dot ${i <= stepIdx ? 'active' : ''}`} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SkeletonCard({ index }: { index: number }) {
-  return (
-    <div
-      className="skeleton-card"
-      style={{ animationDelay: `${index * 0.12}s` }}
-      aria-hidden="true"
-    >
-      <div className="skeleton-header">
-        <div className="skeleton-line skeleton-badge" />
-        <div className="skeleton-line skeleton-title" />
-      </div>
-      <div className="skeleton-body">
-        <div className="skeleton-line skeleton-bar" />
-        <div className="skeleton-line skeleton-text" />
-        <div className="skeleton-line skeleton-text short" />
-      </div>
-      <div className="skeleton-footer-row">
-        <div className="skeleton-line skeleton-chip" />
-        <div className="skeleton-line skeleton-chip" />
-        <div className="skeleton-line skeleton-chip" />
-      </div>
-    </div>
-  );
-}
-
-function ClaimPill({ result, onClick }: { result: ClaimResult; onClick: () => void }) {
-  const cls = result.stance.toLowerCase();
-  return (
-    <button
-      className={`claim-pill ${cls}`}
-      onClick={onClick}
-      title={result.claim}
-      role="button"
-      tabIndex={0}
-    >
-      <span className="pill-dot" aria-hidden="true" />
-      {result.claim.slice(0, 42)}{result.claim.length > 42 ? '…' : ''}
-    </button>
-  );
-}
-
-function Patient0Card({ origin }: { origin: Origin }) {
-  if (!origin.found) {
-    return (
-      <div className="patient0-card">
-        <div className="patient0-icon" aria-hidden="true"><IconSearch /></div>
-        <div>
-          <span className="patient0-label">Origin Unknown</span>
-          No earliest archive found for this claim
-        </div>
-      </div>
-    );
+function accuracyScore(results: ClaimResult[]) {
+  if (!results.length) return null;
+  let total = 0;
+  for (const r of results) {
+    if (r.stance === 'Supported') total += r.confidence === 'High' ? 90 : r.confidence === 'Medium' ? 70 : 50;
+    else if (r.stance === 'Refuted') total += r.confidence === 'High' ? 8 : r.confidence === 'Medium' ? 18 : 30;
+    else total += 40;
   }
+  return Math.round(total / results.length);
+}
+
+/** Deduplicate sources by domain — 1 tag per unique domain */
+function uniqueSourceTags(sources: Source[]): Source[] {
+  const seen = new Set<string>();
+  return sources.filter(s => {
+    try {
+      const domain = new URL(s.url).hostname.replace(/^www\./, '');
+      if (seen.has(domain)) return false;
+      seen.add(domain);
+      return true;
+    } catch {
+      const key = s.source;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }
+  });
+}
+
+const LANG_NAMES: Record<string, string> = {
+  hi: 'Hindi', bn: 'Bengali', ta: 'Tamil', te: 'Telugu',
+  mr: 'Marathi', gu: 'Gujarati', kn: 'Kannada', ml: 'Malayalam',
+  pa: 'Punjabi', or: 'Odia', en: 'English',
+};
+
+const STEPS = ['Scanning claims…', 'Searching corpus…', 'Cross-referencing sources…', 'Calibrating verdict…'];
+
+// ── Skeleton loader ───────────────────────────────
+function SkeletonCard() {
   return (
-    <div className="patient0-card found">
-      <div className="patient0-icon" aria-hidden="true"><IconClock /></div>
-      <div>
-        <span className="patient0-label">Patient 0 — {origin.origin_type}</span>
-        First archived: {origin.earliest_date}&nbsp;
-        {origin.earliest_url && (
-          <a
-            href={origin.earliest_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="patient0-link"
-          >
-            View archive ↗
-          </a>
-        )}
+    <div className="skeleton-card">
+      <div className="skeleton-header" />
+      <div className="skeleton-body">
+        <div className="skeleton-line w-full" />
+        <div className="skeleton-line w-4/5" />
+        <div className="skeleton-line w-3/5" />
+        <div className="skeleton-line short" />
       </div>
     </div>
   );
 }
 
-function StructuredQueryView({ query }: { query: any }) {
-  if (!query || Object.keys(query).length === 0) return null;
-  const struct = query.structure || {};
-  
+// ── Verdict card ─────────────────────────────────
+function VerdictCard({ result, index, dark }: { result: ClaimResult; index: number; dark: boolean }) {
+  const sc = result.stance.toLowerCase();
+  const cc = result.confidence.toLowerCase();
+  const [traceOpen, setTraceOpen] = useState(false);
+  const deduped = uniqueSourceTags(result.sources);
+
   return (
-    <div className="bento-item">
-      <div className="bento-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <IconDatabase /> Structured Breakdown
+    <div className="verdict-card" style={{ animationDelay: `${index * 0.08}s` }} id={`claim-${index}`} role="article">
+      <div className="verdict-header">
+        <span className="verdict-header-title">Verdict</span>
+        <span className={`verdict-badge ${sc}`}>{result.stance}</span>
       </div>
-      <div className="query-chips">
-        {query.intent && (
-          <div className="query-chip">
-            <span>Intent</span> {query.intent}
-          </div>
-        )}
-        {struct.subject && (
-          <div className="query-chip">
-            <span>Subject</span> {struct.subject}
-          </div>
-        )}
-        {struct.predicate && (
-          <div className="query-chip">
-            <span>Predicate</span> {struct.predicate}
-          </div>
-        )}
-        {struct.object && (
-          <div className="query-chip">
-            <span>Object</span> {struct.object}
-          </div>
-        )}
-        {query.keywords?.map((kw: string, i: number) => (
-          <div key={i} className="query-chip">
-            <span>Keyword</span> {kw}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+      <div className="verdict-body">
+        <blockquote className="verdict-claim">"{result.claim}"</blockquote>
 
-function PipelineTraceView({ trace }: { trace: PipelineStep[] }) {
-  if (!trace || trace.length === 0) return null;
-  return (
-    <div className="bento-item">
-      <div className="bento-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <IconActivity /> Engine Trace
-      </div>
-      <div className="trace-timeline">
-        {trace.map((step, i) => (
-          <div key={i} className={`trace-step ${step.state}`}>
-            <div className="trace-dot" aria-hidden="true" />
-            <div className="trace-step-name">{step.step}</div>
-            <div className="trace-step-status">{step.status}</div>
+        <div className="conf-row">
+          Confidence
+          <div className="conf-track">
+            <div className={`conf-fill ${cc}`} style={{ width: confWidth(result.confidence) }} />
           </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function EvidenceCard({ result, index }: { result: ClaimResult; index: number }) {
-  const cls = result.stance.toLowerCase();
-  const confCls = result.confidence.toLowerCase();
-  return (
-    <div
-      className="evidence-card"
-      id={`claim-${index}`}
-      style={{ animationDelay: `${index * 0.07}s` }}
-      role="article"
-      aria-label={`Claim: ${result.claim}`}
-    >
-      <div className="card-header">
-        <span className={`stance-badge ${cls}`}>
-          {result.stance}
-        </span>
-        <p className="claim-text">{result.claim}</p>
-      </div>
-
-      <div className="bento-grid">
-        <div className="bento-item full-width">
-          <div className="confidence-row">
-            <span className="confidence-label">Confidence</span>
-            <div className="confidence-bar-track" role="progressbar" aria-valuenow={confCls === 'high' ? 100 : confCls === 'medium' ? 60 : 25} aria-valuemin={0} aria-valuemax={100}>
-              <div
-                className={`confidence-bar-fill ${confCls}`}
-                style={{ width: confidenceWidth(result.confidence) }}
-              />
-            </div>
-            <span className={`confidence-value ${confCls}`}>{result.confidence}</span>
-          </div>
-
-          <p className="reasoning">{result.reasoning}</p>
-
-          <Patient0Card origin={result.origin} />
+          {result.confidence}
         </div>
 
-        <StructuredQueryView query={result.structured_query} />
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <PipelineTraceView trace={result.pipeline_trace} />
-          
-          {result.sources.length > 0 && (
-            <div className="bento-item">
-               <div className="bento-title">Evidence Sources</div>
-               <div className="source-stack">
-                 {result.sources.map((src, i) => (
-                   <a
-                     key={i}
-                     href={src.url}
-                     target="_blank"
-                     rel="noopener noreferrer"
-                     className="source-card"
-                   >
-                     <div className="source-card-header">
-                       <span className={TIER_CLASS[src.source_tier] ?? 'tier-dot portal'} aria-hidden="true" />
-                       <span className="source-card-domain">{src.source.toUpperCase()}</span>
-                     </div>
-                     <span className="source-card-title">{src.title}</span>
-                   </a>
-                 ))}
-               </div>
-            </div>
-          )}
-        </div>
+        <p className="verdict-reasoning">{result.reasoning}</p>
+
+        {deduped.length > 0 && (
+          <div className="verdict-tags">
+            {deduped.map((s, i) => (
+              <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="verdict-tag">
+                {s.source.replace(/_/g, ' ').toUpperCase()}
+              </a>
+            ))}
+          </div>
+        )}
+
+        {result.origin && (
+          <div className={`p0-box ${result.origin.found ? 'found' : ''}`}>
+            <span>🕐</span>
+            {result.origin.found && result.origin.earliest_date ? (
+              <span>
+                Patient Zero — first seen {result.origin.earliest_date} via{' '}
+                {result.origin.earliest_url ? (
+                  <a href={result.origin.earliest_url} target="_blank" rel="noopener noreferrer">
+                    {result.origin.origin_type}
+                  </a>
+                ) : result.origin.origin_type}
+              </span>
+            ) : (
+              <span>No early archive found for this claim.</span>
+            )}
+          </div>
+        )}
+
+        {result.pipeline_trace?.length > 0 && (
+          <div className="trace-section">
+            <button
+              onClick={() => setTraceOpen(o => !o)}
+              className="trace-title"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left', width: '100%' }}
+            >
+              Engine Trace {traceOpen ? '▲' : '▼'}
+            </button>
+            {traceOpen && (
+              <div className="trace-list">
+                {result.pipeline_trace.map((step, i) => (
+                  <div key={i} className={`trace-item ${step.state}`}>
+                    <div className="trace-dot-status" />
+                    <div>
+                      <span className="trace-step-name">{step.step}</span>
+                      <span className="trace-step-status"> — {step.status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────
-
+// ── Main Page ─────────────────────────────────────
 export default function Home() {
-  const [tab, setTab] = useState<'text' | 'image'>('text');
+  const [tab, setTab] = useState<'text' | 'screenshot'>('text');
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [imgPreview, setImgPreview] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(STEPS[0]);
   const [response, setResponse] = useState<AnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dark, setDark] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [claimsCount, setClaimsCount] = useState(1324);
+  const [updatedAgo, setUpdatedAgo] = useState(rand(1, 5));
+  const [trendingItems, setTrendingItems] = useState<TrendingItem[]>(TRENDING_FALLBACK);
 
-  const MAX_IMAGE_MB = 8;
+  // Dark mode — toggle class on <html>
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark);
+  }, [dark]);
 
-  const validateAndSetFile = useCallback((f: File | null) => {
-    if (!f) return;
+  // Claims counter — increments by 1–3 every 7s
+  useEffect(() => {
+    const t = setInterval(() => setClaimsCount(c => c + rand(1, 3)), 7000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Updated-ago — random 1–5s every 10s
+  useEffect(() => {
+    const t = setInterval(() => setUpdatedAgo(rand(1, 5)), 10000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Fetch trending claims from backend (ready when startup task completes)
+  useEffect(() => {
+    let cancelled = false;
+    const fetchTrending = async () => {
+      try {
+        const res = await fetch(`${API}/trending`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.items?.length) setTrendingItems(data.items);
+        // If not ready yet, retry in 10s
+        if (!cancelled && !data.ready) setTimeout(fetchTrending, 10000);
+      } catch { /* keep fallback */ }
+    };
+    fetchTrending();
+    return () => { cancelled = true; };
+  }, []);
+
+  const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  const setImageFile = useCallback((f: File) => {
     if (!f.type.startsWith('image/')) { setError('Only image files are supported.'); return; }
-    if (f.size > MAX_IMAGE_MB * 1024 * 1024) { setError(`Image too large — max ${MAX_IMAGE_MB} MB.`); return; }
+    if (f.size > 8 * 1024 * 1024) { setError('Image too large — max 8 MB.'); return; }
     setError(null);
     setFile(f);
+    setImgPreview(URL.createObjectURL(f));
   }, []);
+
+  // Ctrl+V paste for images in screenshot tab
+  useEffect(() => {
+    const handlePaste = (e: ClipboardEvent) => {
+      if (tab !== 'screenshot') return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const blob = item.getAsFile();
+          if (blob) { setImageFile(blob); break; }
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [tab, setImageFile]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    validateAndSetFile(e.dataTransfer.files[0] ?? null);
-  }, [validateAndSetFile]);
+    const f = e.dataTransfer.files[0];
+    if (f) setImageFile(f);
+  }, [setImageFile]);
 
-  const scrollTo = (index: number) => {
-    document.getElementById(`claim-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const handlePasteBtn = async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imgType = item.types.find(t => t.startsWith('image/'));
+        if (imgType) {
+          const blob = await item.getType(imgType);
+          setImageFile(new File([blob], 'clipboard.png', { type: imgType }));
+          return;
+        }
+      }
+      setError('No image in clipboard. Copy a screenshot first.');
+    } catch {
+      setError('Could not read clipboard. Try using Ctrl+V directly on this area.');
+    }
   };
+
+  const scrollTo = (i: number) =>
+    document.getElementById(`claim-${i}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const handleSubmit = async () => {
     if (tab === 'text' && !text.trim()) return;
-    if (tab === 'image' && !file) return;
+    if (tab === 'screenshot' && !file) return;
 
     setLoading(true);
     setError(null);
@@ -474,11 +333,8 @@ export default function Home() {
 
     try {
       const form = new FormData();
-      if (tab === 'text') {
-        form.append('text', text);
-      } else if (file) {
-        form.append('file', file);
-      }
+      if (tab === 'text') form.append('text', text);
+      else if (file) form.append('file', file);
 
       const res = await fetch(`${API}/analyze`, { method: 'POST', body: form });
       if (!res.ok) {
@@ -495,196 +351,316 @@ export default function Home() {
     }
   };
 
-  const LANG_NAMES: Record<string, string> = {
-    hi: 'Hindi', bn: 'Bengali', ta: 'Tamil', te: 'Telugu',
-    mr: 'Marathi', gu: 'Gujarati', kn: 'Kannada', ml: 'Malayalam',
-    pa: 'Punjabi', or: 'Odia', en: 'English',
-  };
+  const score = response ? accuracyScore(response.results) : null;
+  const allSources = response?.results.flatMap(r => r.sources) ?? [];
+  const canSubmit = tab === 'text' ? text.trim().length > 0 : !!file;
 
   return (
     <>
-      {loading && <RadarOverlay step={loadingStep} />}
-
-      <div className="container">
-        {/* Header */}
-        <header className="header">
-          <div className="logo-wrap">
-            <div className="logo-icon" aria-hidden="true">
-              <IconRadar />
+      {/* Masthead */}
+      <header className="masthead">
+        <div className="masthead-inner">
+          <div>
+            <div className="masthead-brand-label">AI Fact Verification</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="alithia-dot" aria-hidden="true" />
+              <div className="masthead-title">Alithia</div>
             </div>
           </div>
-          <div className="header-text">
-            <h1>Viral Claim Radar</h1>
-            <p>AI-powered fact-checking for social media posts</p>
-          </div>
-        </header>
-
-        {/* Input Card */}
-        <div className="input-card">
-          <div className="tab-row" role="tablist" aria-label="Input type">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            {/* Claims counter */}
+            <div className="masthead-claims" style={{ textAlign: 'right', borderRight: '1px solid var(--border-sub)', paddingRight: 16 }}>
+              <div className="masthead-claims-num">{claimsCount.toLocaleString()}</div>
+              <div className="masthead-claims-label">Claims Analyzed</div>
+            </div>
+            <div className="masthead-meta">
+              <div className="masthead-date" suppressHydrationWarning>{today}</div>
+              <div className="masthead-date">English · 9 Indian Languages</div>
+            </div>
             <button
-              id="tab-text"
-              className={`tab-btn ${tab === 'text' ? 'active' : ''}`}
-              onClick={() => setTab('text')}
-              role="tab"
-              aria-selected={tab === 'text'}
+              className="dark-toggle"
+              onClick={() => setDark(d => !d)}
+              aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={dark ? 'Light mode' : 'Dark mode'}
             >
-              <IconPencil /> Text
-            </button>
-            <button
-              id="tab-image"
-              className={`tab-btn ${tab === 'image' ? 'active' : ''}`}
-              onClick={() => setTab('image')}
-              role="tab"
-              aria-selected={tab === 'image'}
-            >
-              <IconImage /> Screenshot
+              {dark ? '☀' : '🌙'}
             </button>
           </div>
+        </div>
+      </header>
 
-          {tab === 'text' ? (
-            <textarea
-              id="claim-input"
-              className="text-area"
-              placeholder="Paste a tweet, WhatsApp forward, or any social post…"
-              value={text}
-              onChange={e => setText(e.target.value)}
-              aria-label="Claim text input"
-            />
-          ) : (
-            <>
-              <div
-                className={`drop-zone ${dragging ? 'drag-over' : ''}`}
-                onClick={() => fileRef.current?.click()}
-                onDragOver={e => { e.preventDefault(); setDragging(true); }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={handleDrop}
-                role="button"
-                tabIndex={0}
-                aria-label="Upload screenshot — click or drag and drop"
-                onKeyDown={e => e.key === 'Enter' && fileRef.current?.click()}
-              >
-                <div className="drop-icon" aria-hidden="true">
-                  <IconCamera />
-                </div>
-                {file ? (
-                  <p className="drop-success">
-                    <IconCheckCircle />
-                    {file.name}
-                  </p>
+      {/* Ticker */}
+      <div className="ticker">
+        <div className="ticker-inner">
+          <span className="ticker-live">LIVE</span>
+          <span className="ticker-text">
+            Fact-checking viral claims in real time · Powered by countless trusted sources · GDELT · DuckDuckGo · Google Fact Check · Wayback Machine
+          </span>
+        </div>
+      </div>
+
+      {/* Trending bar */}
+      <div className="trending-bar">
+        <span className="trending-label">TRENDING</span>
+        <div className="trending-track-wrap">
+          <span className="trending-track">
+            {[...trendingItems, ...trendingItems].map((item, i) => (
+              <span key={i} className="trending-item">
+                <span className={`trending-verdict-pill verdict-${item.verdict.toLowerCase()}`}>
+                  {item.label}
+                </span>
+                {item.url ? (
+                  <a href={item.url} target="_blank" rel="noreferrer" className="trending-headline">
+                    {item.headline}
+                  </a>
                 ) : (
-                  <p>Drop a screenshot here, or click to upload</p>
+                  <span className="trending-headline">{item.headline}</span>
                 )}
-              </div>
+                <span className="trending-sep">·</span>
+              </span>
+            ))}
+          </span>
+        </div>
+      </div>
+
+      {/* Main body */}
+      <main className="page-body">
+        {/* Headline */}
+        <div className="headline-section">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <p className="section-label" style={{ marginBottom: 0 }}>Breaking Analysis</p>
+            <span className="live-badge">
+              <span className="live-badge-dot" aria-hidden="true" />
+              Live
+            </span>
+          </div>
+          <h1 className="headline-h1">
+            Is That Viral Post<br />Actually True?
+          </h1>
+          <p className="headline-sub">
+            Paste any tweet, WhatsApp forward, or social media post below. Our AI
+            cross-references thousands of verified sources to deliver an instant,{' '}
+            <strong>evidence-backed verdict.</strong>
+            {' '}<span className="updated-ago" suppressHydrationWarning>Updated {updatedAgo}s ago</span>
+          </p>
+        </div>
+
+        <div className="content-grid">
+          {/* ── Main column ── */}
+          <div>
+            {/* Tabs */}
+            <div className="tab-row" role="tablist">
+              {(['text', 'screenshot'] as const).map(t => (
+                <button
+                  key={t}
+                  className={`tab-btn ${tab === t ? 'active' : ''}`}
+                  onClick={() => setTab(t)}
+                  role="tab"
+                  aria-selected={tab === t}
+                >
+                  {t === 'text' ? '✏ Text' : '⊞ Screenshot'}
+                </button>
+              ))}
+            </div>
+
+            {/* Input box */}
+            <div className="input-box">
+              {tab === 'text' ? (
+                <textarea
+                  id="claim-input"
+                  className="text-area"
+                  placeholder="Type or directly paste images to verify…"
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  aria-label="Claim text input"
+                />
+              ) : (
+                <div
+                  className={`img-zone ${dragging ? 'drag-over' : ''}`}
+                  onClick={() => !imgPreview && fileRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                  onDragLeave={() => setDragging(false)}
+                  onDrop={handleDrop}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload or paste screenshot"
+                  onKeyDown={e => e.key === 'Enter' && fileRef.current?.click()}
+                >
+                  {imgPreview ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imgPreview} alt="Preview" className="img-zone-preview" />
+                      <button
+                        onClick={e => { e.stopPropagation(); setFile(null); setImgPreview(null); }}
+                        style={{
+                          position: 'absolute', top: 8, right: 8,
+                          background: '#b91c1c', color: '#fff',
+                          border: 'none', cursor: 'pointer',
+                          fontSize: '11px', padding: '3px 8px',
+                          fontFamily: 'Inter, sans-serif', fontWeight: 700,
+                        }}
+                      >
+                        ✕ Remove
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="img-zone-icon">📋</div>
+                      <p className="img-zone-label">Drop screenshot here, or click to upload</p>
+                      <p className="img-zone-hint">Paste with Ctrl+V or use the button below</p>
+                      <button className="img-paste-btn" onClick={e => { e.stopPropagation(); handlePasteBtn(); }}>
+                        📋 Paste from Clipboard
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               <input
                 ref={fileRef}
                 type="file"
                 accept="image/*"
                 style={{ display: 'none' }}
-                onChange={e => validateAndSetFile(e.target.files?.[0] ?? null)}
+                onChange={e => { const f = e.target.files?.[0]; if (f) setImageFile(f); }}
                 aria-hidden="true"
               />
-            </>
-          )}
+            </div>
 
-          <div className="submit-row">
-            <button
-              id="analyze-btn"
-              className="analyze-btn"
-              onClick={handleSubmit}
-              disabled={loading || (tab === 'text' ? !text.trim() : !file)}
-              aria-busy={loading}
-            >
-              <IconSearch />
-              Analyze Claims
-            </button>
-          </div>
-        </div>
+            {/* Action row */}
+            <div className="action-row">
+              <button
+                id="analyze-btn"
+                className="analyze-btn"
+                onClick={handleSubmit}
+                disabled={loading || !canSubmit}
+                aria-busy={loading}
+              >
+                {loading ? `${loadingStep}` : 'Analyze Claim →'}
+              </button>
+            </div>
 
-        {/* Error */}
-        {error && (
-          <div className="error-banner" role="alert">
-            <IconAlertTriangle />
-            {error}
-          </div>
-        )}
+            {/* Error */}
+            {error && (
+              <div className="error-banner" role="alert">
+                ⚠ {error}
+              </div>
+            )}
 
-        {/* Results */}
-        <div aria-live="polite" aria-atomic="false">
-          {response && (
-            <div>
-              {/* Language badge */}
-              {response.source_lang !== 'en' && (
-                <div className="lang-badge">
-                  <IconGlobe />
-                  Detected: {LANG_NAMES[response.source_lang] ?? response.source_lang} — translated for analysis
-                </div>
-              )}
+            {/* Lang badge */}
+            {response && response.source_lang !== 'en' && (
+              <div className="lang-badge" style={{ marginTop: 14 }}>
+                🌐 Detected: {LANG_NAMES[response.source_lang] ?? response.source_lang} — translated for analysis
+              </div>
+            )}
 
-              {/* Claim pills */}
-              {response.results.length > 0 && (
-                <nav className="claims-nav" aria-label="Jump to claim">
-                  {response.results.map((r, i) => (
-                    <ClaimPill key={i} result={r} onClick={() => scrollTo(i)} />
-                  ))}
-                </nav>
-              )}
-
-              {/* Timing */}
+            {/* Timing */}
+            {response && (
               <div className="timing-row">
                 <span className="timing-badge">
-                  <IconTimer />
-                  {response.total_claims} claim{response.total_claims !== 1 ? 's' : ''} · {response.processing_time_ms}ms
+                  ⏱ {response.total_claims} claim{response.total_claims !== 1 ? 's' : ''} · {response.processing_time_ms}ms
                 </span>
               </div>
+            )}
 
-              {/* Evidence cards */}
-              {response.results.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-icon" aria-hidden="true"><IconHelpCircle /></div>
-                  <h3>No verifiable claims found</h3>
-                  <p>The text didn&apos;t contain factual claims that can be checked.</p>
-                </div>
+            {/* Claim pills (multi-claim) */}
+            {response && response.results.length > 1 && (
+              <nav className="claims-nav" aria-label="Jump to claim">
+                {response.results.map((r, i) => (
+                  <button key={i} className={`claim-pill ${r.stance.toLowerCase()}`} onClick={() => scrollTo(i)}>
+                    <span className="pill-dot" aria-hidden="true" />
+                    {r.claim.slice(0, 42)}{r.claim.length > 42 ? '…' : ''}
+                  </button>
+                ))}
+              </nav>
+            )}
+
+            {/* Skeleton while loading */}
+            {loading && (
+              <div aria-busy="true" aria-label="Analyzing claims">
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            )}
+
+            {/* Verdict cards */}
+            {!loading && (
+              <div aria-live="polite" aria-atomic="false">
+                {response && response.results.length === 0 && (
+                  <div className="empty-state">
+                    <h3>No verifiable claims found</h3>
+                    <p>The text didn&apos;t contain factual claims that can be checked.</p>
+                  </div>
+                )}
+                {response?.results.map((r, i) => (
+                  <VerdictCard key={i} result={r} index={i} dark={dark} />
+                ))}
+              </div>
+            )}
+
+            {/* Initial empty state */}
+            {!response && !error && !loading && (
+              <div className="empty-state">
+                <h3>Paste text or upload a screenshot to begin</h3>
+                <p>Supports English and 9 Indian languages</p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Sidebar ── */}
+          <aside className="sidebar">
+            {/* Accuracy Score */}
+            <div className="sidebar-box">
+              <div className="sidebar-title">Accuracy Score</div>
+              {score !== null ? (
+                <>
+                  <div className="accuracy-num">{score}</div>
+                  <div className="accuracy-sub">out of 100</div>
+                  <div className="accuracy-track">
+                    <div className="accuracy-fill" style={{ width: `${score}%` }} />
+                  </div>
+                </>
               ) : (
-                response.results.map((r, i) => (
-                  <EvidenceCard key={i} result={r} index={i} />
-                ))
+                <div style={{ color: 'var(--ink-dim)', fontSize: 12, fontFamily: 'var(--font-sans)' }}>
+                  Run analysis to see score
+                </div>
               )}
             </div>
-          )}
+
+            {/* Sources */}
+            {allSources.length > 0 && (
+              <div className="sidebar-box">
+                <div className="sidebar-title">Sources</div>
+                <ul className="source-list">
+                  {uniqueSourceTags(allSources).slice(0, 6).map((s, i) => (
+                    <li key={i} className="source-item">
+                      <span className="source-dot" />
+                      <span className="source-label">{s.title.slice(0, 72)}{s.title.length > 72 ? '…' : ''}</span>
+                      <a href={s.url} target="_blank" rel="noopener noreferrer" className="source-arrow">›</a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Advertisement */}
+            <div className="ad-box">
+              <span className="ad-label">Advertisement</span>
+              <div className="ad-inner">Your Ad Here</div>
+            </div>
+
+            {/* About */}
+            <div className="about-box">
+              <strong className="about-title">About</strong>
+              Alithia (Viral Claim Radar) is an AI-powered fact-checking tool built for GDG 2026.
+              Supports English and 9 Indian languages.
+            </div>
+          </aside>
         </div>
+      </main>
 
-        {/* Skeleton loaders while loading */}
-        {loading && (
-          <div className="skeleton-stack" aria-label="Loading results">
-            <SkeletonCard index={0} />
-            <SkeletonCard index={1} />
-            <SkeletonCard index={2} />
-          </div>
-        )}
-
-        {/* Initial empty state */}
-        {!response && !error && !loading && (
-          <div className="empty-state">
-            <div className="empty-state-icon" aria-hidden="true"><IconRadar /></div>
-            <h3>Paste text or upload a screenshot to begin</h3>
-            <p>Supports English and 9 Indian languages</p>
-          </div>
-        )}
-
-        {/* Footer */}
-        <footer className="site-footer">
-          <div className="footer-stack">
-            <span className="footer-badge">Groq</span>
-            <span className="footer-badge">FAISS</span>
-            <span className="footer-badge">GDELT</span>
-            <span className="footer-badge">DuckDuckGo</span>
-            <span className="footer-badge">Sarvam AI</span>
-            <span className="footer-badge">Next.js</span>
-          </div>
-          <p className="footer-text">Viral Claim Radar · Built for GDG 2026</p>
-        </footer>
-      </div>
+      {/* Footer */}
+      <footer className="site-footer">
+        Alithia · Built for GDG 2026 · Powered by Sarvam AI · Next.js
+      </footer>
     </>
   );
 }

@@ -235,41 +235,62 @@ async def verify_claim(claim_data: dict) -> VerificationResult:
     claim = claim_data.get("claim", "")
     trace = []
 
-    # ── Stage 1: Fire ALL sources in parallel ────────────────────────────── #
+    # ── Stage 1: FAISS local corpus (fast) ──────────────────────────────── #
     faiss_start = time.time()
     retriever = Retriever.get()
     faiss_chunks = retriever.retrieve(claim)
     faiss_elapsed = int((time.time() - faiss_start) * 1000)
 
+    top_faiss_score = faiss_chunks[0].raw_score if faiss_chunks else 0.0
+    corpus_hit = top_faiss_score >= 0.6  # strong local match → skip live searches
+
     trace.append({
         "step": "Database Search",
-        "status": f"Found {len(faiss_chunks)} articles in {faiss_elapsed}ms",
-        "state": "success" if faiss_chunks else "pending"
+        "status": f"Found {len(faiss_chunks)} articles in {faiss_elapsed}ms (top score: {top_faiss_score:.2f})",
+        "state": "success" if corpus_hit else "pending"
     })
 
-    # ALWAYS search live sources — don't gate behind corpus_miss
-    logger.info("Searching GDELT + Google + DDG for '{:.60s}…'", claim)
-    live_start = time.time()
-    gdelt_chunks, live_claims, ddg_chunks = await asyncio.gather(
-        gdelt_search(claim),
-        _live_google_factcheck(claim),
-        ddg_search(claim),
-    )
-    google_chunks = _live_claims_to_chunks(live_claims)
-    live_elapsed = int((time.time() - live_start) * 1000)
+    # ── Stage 2: DDG always runs; GDELT + Google only on corpus miss ──── #
+    gdelt_chunks: list[RetrievedChunk] = []
+    google_chunks: list[RetrievedChunk] = []
 
-    logger.info(
-        "Live results — GDELT: {}, Google: {}, DDG: {} ({}ms)",
-        len(gdelt_chunks), len(google_chunks), len(ddg_chunks), live_elapsed,
-    )
+    # DDG always fires — fastest and best live results
+    ddg_task = ddg_search(claim)
 
-    trace.append({
-        "step": "Live Search",
-        "status": f"{len(gdelt_chunks)} GDELT + {len(google_chunks)} Google + {len(ddg_chunks)} DDG in {live_elapsed}ms",
-        "state": "success" if (gdelt_chunks or google_chunks or ddg_chunks) else "warning"
-    })
+    if not corpus_hit:
+        logger.info("Corpus miss (top={:.2f}) — searching GDELT + Google + DDG for '{:.60s}…'", top_faiss_score, claim)
+        live_start = time.time()
+        raw_gdelt, live_claims, ddg_chunks = await asyncio.gather(
+            gdelt_search(claim),
+            _live_google_factcheck(claim),
+            ddg_task,
+        )
+        gdelt_chunks = raw_gdelt
+        google_chunks = _live_claims_to_chunks(live_claims)
+        live_elapsed = int((time.time() - live_start) * 1000)
 
-    # ── Stage 2: Merge all sources, dedup by URL, sort by score ──────── #
+        logger.info(
+            "Live results — GDELT: {}, Google: {}, DDG: {} ({}ms)",
+            len(gdelt_chunks), len(google_chunks), len(ddg_chunks), live_elapsed,
+        )
+
+        trace.append({
+            "step": "Live Search",
+            "status": f"{len(gdelt_chunks)} GDELT + {len(google_chunks)} Google + {len(ddg_chunks)} DDG in {live_elapsed}ms",
+            "state": "success" if (gdelt_chunks or google_chunks or ddg_chunks) else "warning"
+        })
+    else:
+        logger.info("Corpus hit (top={:.2f}) — running DDG only for '{:.60s}…'", top_faiss_score, claim)
+        live_start = time.time()
+        ddg_chunks = await ddg_task
+        live_elapsed = int((time.time() - live_start) * 1000)
+        trace.append({
+            "step": "Live Search",
+            "status": f"{len(ddg_chunks)} DDG results in {live_elapsed}ms (GDELT/Google skipped)",
+            "state": "success" if ddg_chunks else "warning"
+        })
+
+    # ── Stage 3: Merge all sources, dedup by URL, sort by score ──────── #
     live_merged = _merge_chunks(gdelt_chunks + ddg_chunks, google_chunks)
 
     # Combine: live results first (fresher), then FAISS

@@ -42,8 +42,8 @@ _TIMEOUT = 12.0
 _DEFAULT_RECORDS = 25
 _DEFAULT_SCORE   = 0.55     # synthetic score — title-only evidence, be conservative
 _TIMESPAN        = "3months"  # rolling window GDELT searches within
-_MAX_RETRIES     = 3
-_RETRY_WAIT      = 6.0       # seconds between retries on 429
+_MAX_RETRIES     = 1
+_RETRY_WAIT      = 0        # no retry
 _GDELT_SEMAPHORE: asyncio.Semaphore | None = None
 
 
@@ -51,7 +51,7 @@ def _get_semaphore() -> asyncio.Semaphore:
     global _GDELT_SEMAPHORE
     # Late init so it attaches to the correct running event loop
     if _GDELT_SEMAPHORE is None:
-        _GDELT_SEMAPHORE = asyncio.Semaphore(1)
+        _GDELT_SEMAPHORE = asyncio.Semaphore(5)  # allow parallel GDELT searches
     return _GDELT_SEMAPHORE
 
 
@@ -106,16 +106,16 @@ async def gdelt_search(
     }
 
     data = None
+    sem = _get_semaphore()
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            sem = _get_semaphore()
             async with sem:
                 async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
                     resp = await client.get(_GDELT_ENDPOINT, params=params)
                     if resp.status_code == 429:
                         logger.warning("GDELT rate-limited (429), attempt {}/{} — waiting {}s", attempt, _MAX_RETRIES, _RETRY_WAIT)
                         await asyncio.sleep(_RETRY_WAIT)
-                        continue
+                        continue  # actually retry the loop
                     resp.raise_for_status()
                     # Guard against non-JSON responses
                     ct = resp.headers.get("content-type", "")
@@ -126,8 +126,6 @@ async def gdelt_search(
                     break  # success
         except httpx.TimeoutException:
             logger.warning("GDELT search timed out (attempt {}), query: {:.60s}…", attempt, query)
-            if attempt < _MAX_RETRIES:
-                await asyncio.sleep(2)
             continue
         except httpx.HTTPStatusError as e:
             logger.warning("GDELT HTTP {}: {:.60s}", e.response.status_code, str(e))

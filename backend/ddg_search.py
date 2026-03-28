@@ -7,8 +7,8 @@ free, requires no API key, and returns real web search results.
 Parsing strategy:
   - Request the HTML page with a simple form POST
   - Parse with Python's html.parser (no bs4 dependency)
-  - Extract result titles, snippets, and URLs from the known DDG HTML structure
-  - Convert to RetrievedChunk format for the pipeline
+  - Extract result titles, snippets, and URLs from the DDG HTML structure
+  - Both direct href and uddg= redirect wrappers are handled (DDG alternates)
 
 Graceful degradation:
   - Any network/parse error → returns [] silently
@@ -37,11 +37,11 @@ from backend.retriever import Chunk, RetrievedChunk
 _DDG_URL = "https://html.duckduckgo.com/html/"
 _TIMEOUT = 10.0
 _MAX_RESULTS = 12
-_DEFAULT_SCORE = 0.58  # synthetic — DDG snippets are decent evidence
+_DEFAULT_SCORE = 999.0  # massively boosted per user request so DDG always ranks first
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/120.0.0.0 Safari/537.36"
+    "Chrome/124.0.0.0 Safari/537.36"
 )
 
 # Domains known to publish credible fact-checks / authoritative news
@@ -68,17 +68,25 @@ _GOVT_TLDS = (".gov", ".gov.in", ".nic.in", ".mil", ".edu")
 class _DDGResultParser(HTMLParser):
     """
     Parses DuckDuckGo HTML search results page.
-    
-    DDG HTML structure per result:
+
+    DDG HTML structure per result (as of 2025):
       <div class="result results_links results_links_deep web-result">
-        <a class="result__a" href="...">Title</a>
-        <a class="result__snippet">Snippet text...</a>
-        <span class="result__url__domain">domain.com</span>
+        <div class="links_main links_deep result__body">
+          <h2 class="result__title">
+            <a rel="nofollow" class="result__a" href="DIRECT_URL">Title</a>
+          </h2>
+          ...
+          <a class="result__snippet" href="DIRECT_URL">Snippet text...</a>
+        </div>
       </div>
-    
-    We extract: title, href (URL), snippet text.
+
+    Notes:
+    - DDG switched from uddg= redirect URLs to direct hrefs for result__a.
+      Both formats are handled gracefully.
+    - result__snippet is an <a> tag whose text content is the snippet.
+    - cls can be None if the tag has no class attribute — guard accordingly.
     """
-    
+
     def __init__(self):
         super().__init__()
         self.results: list[dict] = []
@@ -86,43 +94,52 @@ class _DDGResultParser(HTMLParser):
         self._in_snippet = False
         self._current: dict = {}
         self._current_text: list[str] = []
-    
+
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]):
         attr_dict = dict(attrs)
-        cls = attr_dict.get("class", "")
-        
+        cls = attr_dict.get("class") or ""   # guard: class can be None
+
         if tag == "a" and "result__a" in cls:
             self._in_result_a = True
             self._current_text = []
-            href = attr_dict.get("href", "")
-            # DDG wraps URLs in a redirect: //duckduckgo.com/l/?uddg=REAL_URL&...
-            real_url = self._extract_url(href)
-            self._current["url"] = real_url
-            
+            href = attr_dict.get("href") or ""
+            self._current["url"] = self._extract_url(href)
+
         elif tag == "a" and "result__snippet" in cls:
             self._in_snippet = True
             self._current_text = []
-    
+            # snippet anchor also carries a direct URL — use as fallback
+            href = attr_dict.get("href") or ""
+            if not self._current.get("url"):
+                self._current["url"] = self._extract_url(href)
+
     def handle_endtag(self, tag: str):
         if tag == "a" and self._in_result_a:
             self._in_result_a = False
-            self._current["title"] = " ".join(self._current_text).strip()
-            
+            title = " ".join(t for t in self._current_text if t).strip()
+            if title:
+                self._current["title"] = title
+
         elif tag == "a" and self._in_snippet:
             self._in_snippet = False
-            self._current["snippet"] = " ".join(self._current_text).strip()
-            # A complete result has title + url + snippet
+            snippet = " ".join(t for t in self._current_text if t).strip()
+            self._current["snippet"] = snippet
+            # Commit result if we have at least a URL and title
             if self._current.get("url") and self._current.get("title"):
                 self.results.append(self._current)
             self._current = {}
-    
+
     def handle_data(self, data: str):
         if self._in_result_a or self._in_snippet:
-            self._current_text.append(data.strip())
-    
+            stripped = data.strip()
+            if stripped:
+                self._current_text.append(stripped)
+
     @staticmethod
     def _extract_url(href: str) -> str:
-        """Extract real URL from DDG redirect wrapper."""
+        """Extract real URL — handles both direct hrefs and uddg= redirect wrappers."""
+        if not href:
+            return ""
         if "uddg=" in href:
             match = re.search(r"uddg=([^&]+)", href)
             if match:
@@ -137,11 +154,11 @@ class _DDGResultParser(HTMLParser):
 async def ddg_search(query: str, n: int = _MAX_RESULTS) -> list[RetrievedChunk]:
     """
     Search DuckDuckGo HTML for `query` and return results as RetrievedChunks.
-    
+
     Args:
         query: Claim text to search for.
         n:     Max number of results.
-    
+
     Returns:
         List of RetrievedChunk objects — may be empty on error.
     """
@@ -224,7 +241,7 @@ def _to_chunks(results: list[dict]) -> list[RetrievedChunk]:
         source_tier = _infer_tier(domain)
         source_name = domain.split(".")[0] if domain else "ddg"
 
-        # Trust-tier boosts
+        # Trust-tier boosts on top of the already-high base score
         tier_boost = {"govt": 1.15, "verified": 1.05, "portal": 1.0}.get(source_tier, 1.0)
         score = round(_DEFAULT_SCORE * tier_boost, 3)
 

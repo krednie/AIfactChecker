@@ -48,14 +48,6 @@ class Settings:
     BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
-    # ── Memory optimisation flags ─────────────────────────────────────────
-    # Set PRELOAD_OCR=true only if you have >2 GB RAM free at startup.
-    # EasyOCR loads a ~700 MB torch model; defer it to save RAM on Render.
-    PRELOAD_OCR: bool = os.getenv("PRELOAD_OCR", "false").lower() == "true"
-    # Set PRELOAD_TRENDING=true to run 5 parallel fact-checks at startup.
-    # Disabled by default to avoid cold-start memory spikes.
-    PRELOAD_TRENDING: bool = os.getenv("PRELOAD_TRENDING", "false").lower() == "true"
-
     # ── Trust tiers for re-ranking ────────────────────────────────────────
     TRUST_TIERS: dict = {
         "govt": 1.5,       # PIB, government advisories
