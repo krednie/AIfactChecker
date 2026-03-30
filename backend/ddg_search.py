@@ -35,7 +35,7 @@ from backend.retriever import Chunk, RetrievedChunk
 # ── Constants ─────────────────────────────────────────────────────────────── #
 
 _DDG_URL = "https://html.duckduckgo.com/html/"
-_TIMEOUT = 10.0
+_TIMEOUT = 20.0   # raised: Render cold-start + DDG latency needs headroom
 _MAX_RESULTS = 12
 _DEFAULT_SCORE = 999.0  # massively boosted per user request so DDG always ranks first
 _USER_AGENT = (
@@ -43,6 +43,14 @@ _USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
 )
+_DDG_HEADERS = {
+    "User-Agent": _USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Referer": "https://duckduckgo.com/",
+    "Origin": "https://duckduckgo.com",
+}
 
 # Domains known to publish credible fact-checks / authoritative news
 _VERIFIED_DOMAINS = {
@@ -165,24 +173,8 @@ async def ddg_search(query: str, n: int = _MAX_RESULTS) -> list[RetrievedChunk]:
     if not query:
         return []
 
-    try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.post(
-                _DDG_URL,
-                data={"q": query[:300], "b": "", "kl": ""},
-                headers={
-                    "User-Agent": _USER_AGENT,
-                    "Accept": "text/html",
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-            )
-            resp.raise_for_status()
-            html = resp.text
-    except httpx.TimeoutException:
-        logger.warning("DDG search timed out for: {:.60s}…", query)
-        return []
-    except Exception as e:
-        logger.warning("DDG search error: {}", e)
+    html = await _fetch_ddg_html(query)
+    if not html:
         return []
 
     # Parse HTML
@@ -200,6 +192,45 @@ async def ddg_search(query: str, n: int = _MAX_RESULTS) -> list[RetrievedChunk]:
     chunks = _to_chunks(parser.results[:n])
     logger.info("DDG: {} results for '{:.50s}…'", len(chunks), query)
     return chunks
+
+
+async def _fetch_ddg_html(query: str) -> str:
+    """Fetch DDG HTML via POST; fall back to GET if POST returns no results."""
+    q = query[:300]
+    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
+        # --- Primary: POST (standard DDG HTML form) ---
+        try:
+            resp = await client.post(
+                _DDG_URL,
+                data={"q": q, "b": "", "kl": ""},
+                headers=_DDG_HEADERS,
+            )
+            resp.raise_for_status()
+            html = resp.text
+            # Quick sanity check — if results are present we're done
+            if "result__a" in html:
+                return html
+            logger.debug("DDG POST returned no result__a — trying GET fallback")
+        except httpx.TimeoutException:
+            logger.warning("DDG POST timed out for: {:.60s}…", query)
+        except Exception as e:
+            logger.warning("DDG POST error: {} — trying GET fallback", e)
+
+        # --- Fallback: GET (some regions/IPs work better with GET) ---
+        try:
+            resp = await client.get(
+                _DDG_URL,
+                params={"q": q, "kl": ""},
+                headers=_DDG_HEADERS,
+            )
+            resp.raise_for_status()
+            return resp.text
+        except httpx.TimeoutException:
+            logger.warning("DDG GET timed out for: {:.60s}…", query)
+        except Exception as e:
+            logger.warning("DDG GET error: {}", e)
+
+    return ""
 
 
 # ── Conversion ────────────────────────────────────────────────────────────── #

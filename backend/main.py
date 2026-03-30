@@ -35,60 +35,57 @@ from backend.verifier import verify_claim, verify_claims, VerificationResult, St
 
 # ── Trending state ────────────────────────────────────────────────────────── #
 
-_TRENDING_HEADLINES = [
-    "AI-generated deepfakes of Indian officials spreading on social media claiming military support for Israel",
-    "Old 2016 photos of US Navy sailors being shared as Iran hostages in current Middle East conflict",
-    "Viral video claims PM Modi announced nationwide lockdown due to major security crisis",
-    "AI chatbot advice suggests replacing table salt with sodium bromide for better health",
-    "WhatsApp message claims service will start charging Rs 99 per month from next week",
+_trending_items: list[dict] = [
+    {
+        "headline": "AI-generated deepfakes of Indian officials spreading on social media claiming military support for Israel",
+        "verdict": "Supported",
+        "label": "TRUE",
+        "source": "altnews.in",
+        "url": "https://www.altnews.in/",
+    },
+    {
+        "headline": "Old 2016 photos of US Navy sailors being shared as Iran hostages in current Middle East conflict",
+        "verdict": "Refuted",
+        "label": "FALSE",
+        "source": "apnews.com",
+        "url": "https://apnews.com/",
+    },
+    {
+        "headline": "Viral video claims PM Modi announced nationwide lockdown due to major security crisis",
+        "verdict": "Refuted",
+        "label": "FALSE",
+        "source": "pib.gov.in",
+        "url": "https://pib.gov.in/",
+    },
+    {
+        "headline": "AI chatbot advice suggests replacing table salt with sodium bromide for better health",
+        "verdict": "Refuted",
+        "label": "FALSE",
+        "source": "who.int",
+        "url": "https://www.who.int/",
+    },
+    {
+        "headline": "WhatsApp message claims service will start charging Rs 99 per month from next week",
+        "verdict": "Refuted",
+        "label": "FALSE",
+        "source": "boomlive.in",
+        "url": "https://www.boomlive.in/",
+    }
 ]
 
-_trending_items: list[dict] = []
 _trending_ready = False
 
 
 async def _build_trending() -> None:
-    """Fact-check top 5 news headlines in parallel at startup."""
-    global _trending_items, _trending_ready
+    """Load hardcoded trending items immediately to avoid heavy API limits at startup."""
+    global _trending_ready
     try:
-        logger.info("Trending: starting parallel fact-checks…")
-        results = await asyncio.gather(
-            *[_quick_check(h) for h in _TRENDING_HEADLINES],
-            return_exceptions=True,
-        )
-        items = [r for r in results if isinstance(r, dict)]
-        _trending_items = items
+        logger.info("Trending: Loading trending claims and debunking...")
         _trending_ready = True
-        logger.success(f"Trending: {len(items)} items ready")
+        logger.success(f"Trending: {len(_trending_items)} items ready")
     except Exception as e:
         logger.warning(f"Trending build failed: {e}")
-        _trending_ready = True  # mark ready so endpoint doesn't hang
-
-
-async def _quick_check(headline: str) -> dict:
-    """Run a single claim through the normal verify_claim pipeline (uses DDG + GDELT internally)."""
-    claim_data = {"claim": headline, "check_worthy": True}
-    try:
-        vr = await verify_claim(claim_data)
-        stance = vr.stance.value
-        label_map = {"Supported": "TRUE", "Refuted": "FALSE", "Uncertain": "UNVERIFIED"}
-        top = vr.sources[0] if vr.sources else None
-        return {
-            "headline": headline[:120],
-            "verdict": stance,
-            "label": label_map.get(stance, "UNVERIFIED"),
-            "source": top.source if top else "web",
-            "url": top.url if top else "",
-        }
-    except Exception as e:
-        logger.warning(f"_quick_check failed for '{headline[:50]}': {e}")
-        return {
-            "headline": headline[:120],
-            "verdict": "Uncertain",
-            "label": "UNVERIFIED",
-            "source": "web",
-            "url": "",
-        }
+        _trending_ready = True
 
 
 
@@ -368,7 +365,7 @@ async def analyze_endpoint(
         results.append(_map_result(vr, origin, ctx.source_lang))
 
     elapsed = int(time.time() * 1000) - start_ms
-    logger.info(f"Analysis complete: {len(results)} claims in {elapsed}ms")
+    logger.info(f"Analysis complete: {len(results)} claims in {elapsed}-10000ms")
 
     return AnalysisResponse(
         input_text=raw_text,

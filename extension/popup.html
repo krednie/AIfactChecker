@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alithia — Fact Checker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <!-- ── IDLE VIEW ─────────────────────────────── -->
+  <div id="view-idle" class="view active">
+    <header class="masthead">
+      <div class="brand-label">AI Fact Verification</div>
+      <div class="brand-name">Alithia</div>
+    </header>
+    <div class="ticker">
+      <span class="ticker-live">LIVE</span>
+      <span class="ticker-text">Fact-checking · GDELT · DuckDuckGo · Google Fact Check</span>
+    </div>
+
+    <div class="input-section">
+      <!-- Tabs -->
+      <div class="tab-row" role="tablist">
+        <button class="tab-btn active" id="tab-text" role="tab" aria-selected="true">✏ Text</button>
+        <button class="tab-btn" id="tab-img" role="tab" aria-selected="false">⊞ Screenshot</button>
+      </div>
+
+      <!-- Text panel -->
+      <div id="panel-text" class="input-panel">
+        <textarea
+          id="text-input"
+          class="text-area"
+          rows="4"
+          placeholder="Type or directly paste images to verify…"
+        ></textarea>
+      </div>
+
+      <!-- Image panel -->
+      <div id="panel-img" class="input-panel hidden">
+        <div id="img-zone" class="img-zone" tabindex="0" role="button" aria-label="Upload or paste screenshot">
+          <div id="img-idle">
+            <div class="img-zone-icon">📋</div>
+            <p class="img-zone-label">Drop screenshot here, or click to upload</p>
+            <p class="img-zone-hint">Ctrl+V also works</p>
+          </div>
+          <img id="img-preview" class="img-preview hidden" alt="Preview" />
+        </div>
+        <div class="img-actions">
+          <button id="btn-paste-clip" class="secondary-btn">📋 Paste Clipboard</button>
+          <button id="btn-clear-img" class="secondary-btn hidden">✕ Clear</button>
+        </div>
+        <input type="file" id="file-input" accept="image/*" style="display:none" aria-hidden="true" />
+      </div>
+
+      <!-- Action row -->
+      <div class="action-row">
+        <div id="grab-btns" class="grab-btns">
+          <button id="btn-page" class="grab-btn" title="Grab page text">📄 Page</button>
+          <button id="btn-sel" class="grab-btn" title="Use selected text">✏ Selection</button>
+        </div>
+        <button id="btn-analyze" class="analyze-btn" disabled>Analyze Claim →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LOADING VIEW ───────────────────────────── -->
+  <div id="view-loading" class="view">
+    <header class="masthead">
+      <div class="brand-label">AI Fact Verification</div>
+      <div class="brand-name">Alithia</div>
+    </header>
+    <div class="loading-center">
+      <div class="spinner"></div>
+      <p id="loading-label" class="loading-label">Scanning claims…</p>
+    </div>
+  </div>
+
+  <!-- ── RESULTS VIEW ───────────────────────────── -->
+  <div id="view-results" class="view">
+    <header class="masthead small">
+      <div class="brand-name small">Alithia</div>
+      <div class="results-header-row">
+        <button id="btn-back" class="back-btn">← New</button>
+        <span id="results-meta" class="results-meta"></span>
+      </div>
+    </header>
+
+    <!-- Claims nav pills -->
+    <div id="claims-nav" class="claims-nav"></div>
+
+    <!-- Sidebar: accuracy score -->
+    <div id="sidebar-score" class="sidebar-score hidden">
+      <div class="score-label">Accuracy Score</div>
+      <div class="score-row">
+        <span id="score-num" class="score-num">—</span>
+        <span class="score-sub">/ 100</span>
+      </div>
+      <div class="score-track"><div id="score-fill" class="score-fill"></div></div>
+    </div>
+
+    <!-- Verdict cards -->
+    <div id="claims-container" class="claims-container"></div>
+  </div>
+
+  <!-- ── ERROR VIEW ─────────────────────────────── -->
+  <div id="view-error" class="view">
+    <header class="masthead">
+      <div class="brand-label">AI Fact Verification</div>
+      <div class="brand-name">Alithia</div>
+    </header>
+    <div class="error-center">
+      <div class="error-icon">⚠</div>
+      <p id="error-msg" class="error-msg">Something went wrong.</p>
+      <button id="btn-retry" class="analyze-btn">Try Again →</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

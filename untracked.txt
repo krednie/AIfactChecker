@@ -1,0 +1,15 @@
+extension/content.js
+extension/icons/icon128.png
+extension/icons/icon16.png
+extension/icons/icon32.png
+extension/icons/icon48.png
+extension/manifest.json
+extension/popup.css
+extension/popup.html
+extension/popup.js
+frontend/app/app/page.tsx
+frontend/app/landing.css
+status.txt
+tmp_ddg_debug.py
+ui.tsx
+untracked.txt
