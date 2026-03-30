@@ -20,11 +20,12 @@ html {
 
 .lp-root {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: #080808;
-    color: #e8e8e8;
+    background: var(--bg, #080808);
+    color: var(--text, #e8e8e8);
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+    transition: background 0.4s, color 0.3s;
 }
 
 /* ── Gradient orbs (ambient glow) ─────────────────── */
@@ -55,7 +56,7 @@ html {
 .lp-orb-2 {
     width: 500px;
     height: 500px;
-    background: #7c3aed;
+    background: #1d4ed8;
     top: 30%;
     right: -100px;
     animation: orb-drift-2 22s ease-in-out infinite;
@@ -117,9 +118,10 @@ html {
     align-items: center;
     justify-content: space-between;
     padding: 18px 48px;
-    background: rgba(8, 8, 8, 0.6);
-    backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--glass-bg, rgba(8,8,8,0.55));
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
 }
 
 .lp-nav-brand {
@@ -133,7 +135,7 @@ html {
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #b91c1c;
+    background: var(--accent, #e63946);
     animation: pulse-dot 2s ease-in-out infinite;
 }
 
@@ -149,8 +151,8 @@ html {
     align-items: center;
     gap: 8px;
     padding: 9px 22px;
-    background: #fff;
-    color: #080808;
+    background: var(--accent, #e63946);
+    color: #fff;
     font-size: 13px;
     font-weight: 600;
     border-radius: 8px;
@@ -160,7 +162,7 @@ html {
 }
 
 .lp-nav-cta:hover {
-    background: #e8e8e8;
+    background: var(--accent-dk, #cc2f3a);
     transform: translateY(-1px);
 }
 
@@ -211,7 +213,7 @@ html {
 }
 
 .lp-hero-title-accent {
-    background: linear-gradient(135deg, #ef4444, #b91c1c, #7c3aed);
+    background: linear-gradient(135deg, #ef4444, #b91c1c, #1d4ed8);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -454,7 +456,7 @@ html {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: #b91c1c;
+    color: var(--accent, #b91c1c);
     margin-bottom: 16px;
 }
 

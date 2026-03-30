@@ -17,11 +17,36 @@ interface TrendingItem {
 }
 
 const TRENDING_FALLBACK: TrendingItem[] = [
-  { headline: 'WhatsApp to charge ₹99/month from next week', verdict: 'Refuted', label: 'FALSE', source: 'factcheck.afp.com', url: '' },
-  { headline: 'PM Modi announces free 5G by Dec 2026', verdict: 'Uncertain', label: 'MISLEADING', source: 'ndtv.com', url: '' },
-  { headline: 'Kerala floods linked to cloud-seeding experiment', verdict: 'Uncertain', label: 'UNVERIFIED', source: 'thehindu.com', url: '' },
-  { headline: 'AIIMS study links Aadhaar scans to cancer risk', verdict: 'Refuted', label: 'FALSE', source: 'pib.gov.in', url: '' },
-  { headline: 'AI chatbot clears UPSC Mains with 98% score', verdict: 'Uncertain', label: 'MISLEADING', source: 'ndtv.com', url: '' },
+  {
+    headline: 'AI-generated deepfakes of Indian officials claim military support for Israel',
+    verdict: 'Refuted', label: 'FALSE',
+    source: 'altnews.in',
+    url: 'https://www.boomlive.in/fact-check/viral-video-deepfakes-indian-government-official-insiderwb-x-handle-30838',
+  },
+  {
+    headline: 'Old 2016 photos of US Navy sailors shared as Iran hostages in current conflict',
+    verdict: 'Refuted', label: 'FALSE',
+    source: 'apnews.com',
+    url: 'https://apnews.com/article/iran-us-sailors-detained-2016-ec493f76b56cde855ecba70ccc5fa9b1',
+  },
+  {
+    headline: 'Viral video claims PM Modi announced nationwide lockdown due to security crisis',
+    verdict: 'Refuted', label: 'FALSE',
+    source: 'pib.gov.in',
+    url: 'https://pib.gov.in/Pressreleaseshare.aspx?PRID=1913152',
+  },
+  {
+    headline: 'AI chatbot advice suggests replacing table salt with sodium bromide for better health',
+    verdict: 'Refuted', label: 'TRUE',
+    source: 'who.int',
+    url: 'https://www.theguardian.com/technology/2025/aug/12/us-man-bromism-salt-diet-chatgpt-openai-health-information#:~:text=The%20authors%20said%20the%20patient%20appeared%20to,asked%20for%20a%20replacement%20for%20table%20salt.',
+  },
+  {
+    headline: 'WhatsApp message claims service will start charging Rs 99 per month from next week',
+    verdict: 'Refuted', label: 'FALSE',
+    source: 'boomlive.in',
+    url: 'https://www.boomlive.in/fact-check/whatsapp-paid-subscription-fake-message-viral-19654',
+  },
 ];
 
 // ── Types ─────────────────────────────────────────
@@ -222,7 +247,7 @@ export default function Home() {
   const [loadingStep, setLoadingStep] = useState(STEPS[0]);
   const [response, setResponse] = useState<AnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
   const [claimsCount, setClaimsCount] = useState(1324);
   const [updatedAgo, setUpdatedAgo] = useState(rand(1, 5));
@@ -409,13 +434,15 @@ export default function Home() {
                 <span className={`trending-verdict-pill verdict-${item.verdict.toLowerCase()}`}>
                   {item.label}
                 </span>
-                {item.url ? (
-                  <a href={item.url} target="_blank" rel="noreferrer" className="trending-headline">
-                    {item.headline}
-                  </a>
-                ) : (
-                  <span className="trending-headline">{item.headline}</span>
-                )}
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="trending-headline"
+                  title={item.source}
+                >
+                  {item.headline}
+                </a>
                 <span className="trending-sep">·</span>
               </span>
             ))}
