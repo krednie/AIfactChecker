@@ -38,7 +38,7 @@ from backend.retriever import Chunk, RetrievedChunk
 # ── Constants ─────────────────────────────────────────────────────────────── #
 
 _GDELT_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc"
-_TIMEOUT = 12.0
+_TIMEOUT = 3.5      # slashed: fail fast instead of hanging the entire pipeline!
 _DEFAULT_RECORDS = 25
 _DEFAULT_SCORE   = 0.55     # synthetic score — title-only evidence, be conservative
 _TIMESPAN        = "3months"  # rolling window GDELT searches within
@@ -91,6 +91,9 @@ async def gdelt_search(
     Returns:
         List of RetrievedChunk objects — may be empty on error.
     """
+    # GDELT is currently disabled to prevent hanging the pipeline on complex queries.
+    return []
+
     if not query:
         return []
 

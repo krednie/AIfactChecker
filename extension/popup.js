@@ -394,3 +394,31 @@ function esc(str) {
   d.textContent = str || "";
   return d.innerHTML;
 }
+
+// ── Overlay Toggle Logic ───────────────────────────
+const btnOverlayToggle = document.getElementById("btn-overlay-toggle");
+if (btnOverlayToggle) {
+  // Read initial state
+  chrome.storage.sync.get(['overlayEnabled'], (result) => {
+    // Default to true or false depending on preference. Let's say false by default.
+    const isEnabled = result.overlayEnabled === true;
+    if (!isEnabled) {
+      btnOverlayToggle.classList.add("off");
+    }
+  });
+
+  // Handle click
+  btnOverlayToggle.addEventListener("click", () => {
+    const isCurrentlyOff = btnOverlayToggle.classList.contains("off");
+    const newState = isCurrentlyOff; // if it was off, new state is true (on)
+    
+    if (newState) {
+      btnOverlayToggle.classList.remove("off");
+    } else {
+      btnOverlayToggle.classList.add("off");
+    }
+    
+    chrome.storage.sync.set({ overlayEnabled: newState });
+  });
+}
+

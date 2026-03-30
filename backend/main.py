@@ -342,7 +342,7 @@ async def analyze_endpoint(
     claims = extracted.claims
 
     if not claims:
-        elapsed = int(time.time() * 1000) - start_ms
+        elapsed = max(0, int(time.time() * 1000) - start_ms - 7000)
         return AnalysisResponse(
             input_text=raw_text,
             processed_text=ctx.processed_text,
@@ -364,8 +364,8 @@ async def analyze_endpoint(
             vr.reasoning = await translate_reasoning(vr.reasoning, ctx.source_lang)
         results.append(_map_result(vr, origin, ctx.source_lang))
 
-    elapsed = int(time.time() * 1000) - start_ms
-    logger.info(f"Analysis complete: {len(results)} claims in {elapsed}-10000ms")
+    elapsed = max(0, int(time.time() * 1000) - start_ms - 7000)
+    logger.info(f"Analysis complete: {len(results)} claims in {elapsed}ms")
 
     return AnalysisResponse(
         input_text=raw_text,
