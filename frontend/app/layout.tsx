@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './landing.css';
 import './globals.css';
+import { SpotlightProvider } from '@/components/ui/spotlight-card';
 
 export const metadata: Metadata = {
   title: 'Alithia — AI Fact Checker',
@@ -12,7 +13,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <SpotlightProvider />
+        {children}
+      </body>
     </html>
   );
 }

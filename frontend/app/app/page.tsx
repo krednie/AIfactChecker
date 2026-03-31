@@ -73,6 +73,38 @@ interface PipelineStep {
   state: 'success' | 'warning' | 'error' | 'pending';
 }
 
+interface WeightedSource {
+  title?: string;
+  url?: string;
+  domain?: string;
+  source?: string;
+  final_weight?: number;
+}
+
+interface ClaimAnalytics {
+  temporal_metrics?: {
+    first_seen_timestamp?: string | null;
+    peak_density_window?: string | null;
+    virality_index?: number;
+  };
+  bias_index?: number;
+  confidence_score?: number;
+  virality_index?: number;
+  weighted_sources?: WeightedSource[];
+  explainability?: {
+    dominant_narrative?: string | null;
+  };
+}
+
+interface ReportAnalytics {
+  claim_count?: number;
+  stance_distribution?: Record<string, number>;
+  average_confidence_score?: number;
+  average_bias_index?: number;
+  top_influencers?: WeightedSource[];
+  dominant_narratives?: string[];
+}
+
 interface ClaimResult {
   claim: string;
   stance: 'Supported' | 'Refuted' | 'Uncertain';
@@ -83,6 +115,7 @@ interface ClaimResult {
   sources: Source[];
   corpus_miss: boolean;
   origin: Origin;
+  analytics?: ClaimAnalytics;
 }
 
 interface AnalysisResponse {
@@ -92,6 +125,7 @@ interface AnalysisResponse {
   results: ClaimResult[];
   total_claims: number;
   processing_time_ms: number;
+  analytics?: ReportAnalytics;
 }
 
 // ── Helpers ───────────────────────────────────────
@@ -110,6 +144,62 @@ function accuracyScore(results: ClaimResult[]) {
     else total += 40;
   }
   return Math.round(total / results.length);
+}
+
+function toPercent(value: number | undefined | null): number {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value * 100)));
+}
+
+function downloadTextFile(filename: string, content: string, contentType: string) {
+  const blob = new Blob([content], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value: unknown): string {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildReportCsv(response: AnalysisResponse): string {
+  const rows: string[][] = [[
+    'claim',
+    'stance',
+    'confidence',
+    'reasoning',
+    'claim_confidence_score',
+    'claim_bias_index',
+    'first_seen_timestamp',
+    'virality_index',
+    'dominant_narrative',
+    'top_weighted_source',
+  ]];
+
+  for (const result of response.results) {
+    const analytics = result.analytics;
+    const topSource = analytics?.weighted_sources?.[0];
+    rows.push([
+      result.claim,
+      result.stance,
+      result.confidence,
+      result.reasoning,
+      String(analytics?.confidence_score ?? ''),
+      String(analytics?.bias_index ?? ''),
+      analytics?.temporal_metrics?.first_seen_timestamp ?? '',
+      String(analytics?.virality_index ?? analytics?.temporal_metrics?.virality_index ?? ''),
+      analytics?.explainability?.dominant_narrative ?? '',
+      topSource?.domain ?? topSource?.source ?? '',
+    ]);
+  }
+
+  return rows.map((row) => row.map(csvCell).join(',')).join('\n');
 }
 
 /** Deduplicate sources by domain — 1 tag per unique domain */
@@ -154,7 +244,7 @@ function SkeletonCard() {
 }
 
 // ── Verdict card ─────────────────────────────────
-function VerdictCard({ result, index, dark }: { result: ClaimResult; index: number; dark: boolean }) {
+function VerdictCard({ result, index }: { result: ClaimResult; index: number }) {
   const sc = result.stance.toLowerCase();
   const cc = result.confidence.toLowerCase();
   const [traceOpen, setTraceOpen] = useState(false);
@@ -167,7 +257,7 @@ function VerdictCard({ result, index, dark }: { result: ClaimResult; index: numb
         <span className={`verdict-badge ${sc}`}>{result.stance}</span>
       </div>
       <div className="verdict-body">
-        <blockquote className="verdict-claim">"{result.claim}"</blockquote>
+        <blockquote className="verdict-claim">&quot;{result.claim}&quot;</blockquote>
 
         <div className="conf-row">
           Confidence
@@ -237,6 +327,127 @@ function VerdictCard({ result, index, dark }: { result: ClaimResult; index: numb
 }
 
 // ── Main Page ─────────────────────────────────────
+function ReportModal({ response, onClose }: { response: AnalysisResponse; onClose: () => void }) {
+  const report = response.analytics;
+  const stanceDistribution = report?.stance_distribution ?? {};
+  const stanceEntries = Object.entries(stanceDistribution);
+  const topInfluencers = report?.top_influencers?.slice(0, 6) ?? [];
+  const narratives = report?.dominant_narratives ?? [];
+
+  const handleExportJson = () => {
+    downloadTextFile(
+      `alithia-report-${Date.now()}.json`,
+      JSON.stringify(response, null, 2),
+      'application/json;charset=utf-8',
+    );
+  };
+
+  const handleExportCsv = () => {
+    downloadTextFile(
+      `alithia-report-${Date.now()}.csv`,
+      buildReportCsv(response),
+      'text/csv;charset=utf-8',
+    );
+  };
+
+  return (
+    <div className="report-modal-overlay" role="dialog" aria-modal="true" aria-label="Analysis Report">
+      <div className="report-modal">
+        <div className="report-modal-header">
+          <div>
+            <p className="report-kicker">Grounded Report</p>
+            <h2 className="report-title">Deterministic Analytics Summary</h2>
+          </div>
+          <div className="report-actions">
+            <button className="report-btn subtle" onClick={handleExportJson}>Download JSON</button>
+            <button className="report-btn subtle" onClick={handleExportCsv}>Download CSV</button>
+            <button className="report-btn" onClick={onClose}>Close</button>
+          </div>
+        </div>
+
+        <div className="report-grid">
+          <section className="report-card">
+            <h3>Overview</h3>
+            <div className="report-metrics">
+              <div>
+                <strong>{report?.claim_count ?? response.total_claims}</strong>
+                <span>Claims</span>
+              </div>
+              <div>
+                <strong>{toPercent(report?.average_confidence_score)}%</strong>
+                <span>Avg Confidence</span>
+              </div>
+              <div>
+                <strong>{toPercent(report?.average_bias_index)}%</strong>
+                <span>Avg Bias Index</span>
+              </div>
+            </div>
+            <div className="report-tags">
+              {stanceEntries.length > 0 ? stanceEntries.map(([stance, count]) => (
+                <span key={stance} className="report-tag">{stance}: {count}</span>
+              )) : <span className="report-empty">No stance distribution available.</span>}
+            </div>
+          </section>
+
+          <section className="report-card">
+            <h3>Top Influencers</h3>
+            <div className="report-list">
+              {topInfluencers.length > 0 ? topInfluencers.map((source, index) => (
+                <a key={`${source.url ?? source.domain ?? 'source'}-${index}`} href={source.url} target="_blank" rel="noopener noreferrer" className="report-list-item">
+                  <div>
+                    <strong>{source.domain ?? source.source ?? 'source'}</strong>
+                    <span>{(source.title ?? '').slice(0, 90)}{(source.title?.length ?? 0) > 90 ? '...' : ''}</span>
+                  </div>
+                  <em>{toPercent(source.final_weight)}%</em>
+                </a>
+              )) : <p className="report-empty">No ranked influencer sources yet.</p>}
+            </div>
+          </section>
+
+          <section className="report-card full">
+            <h3>Dominant Narratives</h3>
+            <ul className="report-bullets">
+              {narratives.length > 0 ? narratives.map((narrative, index) => (
+                <li key={`${narrative}-${index}`}>{narrative}</li>
+              )) : <li>No narrative clusters available.</li>}
+            </ul>
+          </section>
+
+          <section className="report-card full">
+            <h3>Claim-Level Breakdown</h3>
+            <div className="claim-report-list">
+              {response.results.map((result, index) => {
+                const analytics = result.analytics;
+                const confidenceScore = toPercent(analytics?.confidence_score);
+                const biasScore = toPercent(analytics?.bias_index);
+                const firstSeen = analytics?.temporal_metrics?.first_seen_timestamp ?? result.origin?.earliest_date ?? 'Unknown';
+                const peakWindow = analytics?.temporal_metrics?.peak_density_window ?? 'Unknown';
+                const dominantNarrative = analytics?.explainability?.dominant_narrative ?? 'Not available';
+
+                return (
+                  <article key={`${result.claim}-${index}`} className="claim-report-card">
+                    <div className="claim-report-head">
+                      <h4>{result.claim}</h4>
+                      <span className={`claim-report-stance ${result.stance.toLowerCase()}`}>{result.stance}</span>
+                    </div>
+                    <div className="claim-report-metrics">
+                      <span>Confidence Score: <strong>{confidenceScore}%</strong></span>
+                      <span>Bias Index: <strong>{biasScore}%</strong></span>
+                      <span>First Seen: <strong>{firstSeen}</strong></span>
+                      <span>Peak Window: <strong>{peakWindow}</strong></span>
+                    </div>
+                    <p className="claim-report-narrative">{dominantNarrative}</p>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [tab, setTab] = useState<'text' | 'screenshot'>('text');
   const [text, setText] = useState('');
@@ -252,11 +463,22 @@ export default function Home() {
   const [claimsCount, setClaimsCount] = useState(1324);
   const [updatedAgo, setUpdatedAgo] = useState(rand(1, 5));
   const [trendingItems, setTrendingItems] = useState<TrendingItem[]>(TRENDING_FALLBACK);
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Dark mode — toggle class on <html>
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
   }, [dark]);
+
+  // Lock body scroll when modal is open to freeze the background site
+  useEffect(() => {
+    if (reportOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [reportOpen]);
 
   // Claims counter — increments by 1–3 every 7s
   useEffect(() => {
@@ -286,6 +508,15 @@ export default function Home() {
     fetchTrending();
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!reportOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setReportOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [reportOpen]);
 
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -348,6 +579,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResponse(null);
+    setReportOpen(false);
     setLoadingStep(STEPS[0]);
 
     let stepIdx = 0;
@@ -383,7 +615,7 @@ export default function Home() {
   return (
     <>
       {/* Masthead */}
-      <header className="masthead">
+      <header className="masthead" data-glow>
         <div className="masthead-inner">
           <div>
             <div className="masthead-brand-label">AI Fact Verification</div>
@@ -583,8 +815,11 @@ export default function Home() {
             {response && (
               <div className="timing-row">
                 <span className="timing-badge">
-                  ⏱ {response.total_claims} claim{response.total_claims !== 1 ? 's' : ''} · {response.processing_time_ms}ms
+                  {response.total_claims} claim{response.total_claims !== 1 ? 's' : ''} - {response.processing_time_ms}ms
                 </span>
+                <button className="report-open-btn" onClick={() => setReportOpen(true)}>
+                  View Report
+                </button>
               </div>
             )}
 
@@ -618,7 +853,7 @@ export default function Home() {
                   </div>
                 )}
                 {response?.results.map((r, i) => (
-                  <VerdictCard key={i} result={r} index={i} dark={dark} />
+                  <VerdictCard key={i} result={r} index={i} />
                 ))}
               </div>
             )}
@@ -635,7 +870,7 @@ export default function Home() {
           {/* ── Sidebar ── */}
           <aside className="sidebar">
             {/* Accuracy Score */}
-            <div className="sidebar-box">
+            <div className="sidebar-box" data-glow>
               <div className="sidebar-title">Accuracy Score</div>
               {score !== null ? (
                 <>
@@ -654,7 +889,7 @@ export default function Home() {
 
             {/* Sources */}
             {allSources.length > 0 && (
-              <div className="sidebar-box">
+              <div className="sidebar-box" data-glow>
                 <div className="sidebar-title">Sources</div>
                 <ul className="source-list">
                   {uniqueSourceTags(allSources).slice(0, 6).map((s, i) => (
@@ -675,7 +910,7 @@ export default function Home() {
             </div>
 
             {/* About */}
-            <div className="about-box">
+            <div className="about-box" data-glow>
               <strong className="about-title">About</strong>
               Alithia (Viral Claim Radar) is an AI-powered fact-checking tool built for GDG 2026.
               Supports English and 9 Indian languages.
@@ -688,6 +923,8 @@ export default function Home() {
       <footer className="site-footer">
         Alithia · Built for GDG 2026 · Powered by Sarvam AI · Next.js
       </footer>
+      {reportOpen && response && <ReportModal response={response} onClose={() => setReportOpen(false)} />}
     </>
   );
 }
+

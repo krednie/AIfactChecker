@@ -1,16 +1,19 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ShaderAnimation } from '@/components/ui/shader-lines';
+import { LiquidButton } from '@/components/ui/liquid-glass-button';
 
 export default function LandingPage() {
+  const router = useRouter();
+
   return (
     <div className="lp-root">
 
-      {/* Background Orbs */}
-      <div className="lp-orbs">
-        <div className="lp-orb lp-orb-1"></div>
-        <div className="lp-orb lp-orb-2"></div>
-        <div className="lp-orb lp-orb-3"></div>
+      {/* Background Shader */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 0, pointerEvents: 'none' }}>
+        <ShaderAnimation />
       </div>
 
       {/* Navigation */}
@@ -19,9 +22,9 @@ export default function LandingPage() {
           <div className="lp-nav-dot"></div>
           <span className="lp-nav-name">Alithia</span>
         </div>
-        <Link href="/app" className="lp-nav-cta">
+        <LiquidButton size="default" className="text-white" onClick={() => router.push('/app')}>
           Launch App
-        </Link>
+        </LiquidButton>
       </nav>
 
       {/* Hero Section */}
@@ -39,38 +42,42 @@ export default function LandingPage() {
           The ultimate verification engine for the digital age. Instantly cross-reference claims against thousands of trusted sources, trace origin nodes, and expose manipulation with surgical precision.
         </p>
 
-        <div className="lp-hero-cta-group">
-          <Link href="/app" className="lp-cta-primary">
+        <div className="lp-hero-cta-group" style={{ gap: '20px' }}>
+          <LiquidButton size="lg" className="text-white" onClick={() => router.push('/app')}>
             Start Verifying Now
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
-          </Link>
-          <a href="#how" className="lp-cta-secondary">
+          </LiquidButton>
+          <LiquidButton size="lg" className="text-gray-300" onClick={() => {
+            document.getElementById('how')?.scrollIntoView({ behavior: 'smooth' });
+          }}>
             See how it works
-          </a>
+          </LiquidButton>
         </div>
 
         {/* Hero Mockup */}
-        <div className="lp-hero-mockup">
-          <div className="lp-mockup-toolbar">
-            <div className="lp-mockup-dot"></div>
-            <div className="lp-mockup-dot"></div>
-            <div className="lp-mockup-dot"></div>
-            <div className="lp-mockup-url">alithia.ai/verify</div>
-          </div>
-          <div className="lp-mockup-body">
-            <div className="lp-mockup-field">
-              "The new AI regulation bill automatically bans all open-source models over 10B parameters and imposes a $1M fine on developers..."
+        <div className="lp-hero-mockup" data-glow>
+          <div className="lp-hero-mockup-inner">
+            <div className="lp-mockup-toolbar">
+              <div className="lp-mockup-dot"></div>
+              <div className="lp-mockup-dot"></div>
+              <div className="lp-mockup-dot"></div>
+              <div className="lp-mockup-url">alithia.ai/verify</div>
             </div>
-            <div className="lp-mockup-verdict">
-              <span className="lp-mockup-verdict-badge">Debunked</span>
-              <div className="lp-mockup-verdict-text">
-                <strong>False claim detected.</strong> Cross-referenced with EU AI Act and recent legislative texts. The bill imposes restrictions on high-risk use cases, not parameter sizes, and open-source models are explicitly granted safe harbor exemptions.
-                <div style={{ marginTop: '12px' }} className="lp-mockup-sources">
-                  <span className="lp-mockup-source-chip">europa.eu/ai-act</span>
-                  <span className="lp-mockup-source-chip">reuters.com/tech</span>
-                  <span className="lp-mockup-source-chip">eff.org</span>
+            <div className="lp-mockup-body">
+              <div className="lp-mockup-field">
+                &quot;The new AI regulation bill automatically bans all open-source models over 10B parameters and imposes a $1M fine on developers...&quot;
+              </div>
+              <div className="lp-mockup-verdict">
+                <span className="lp-mockup-verdict-badge">Debunked</span>
+                <div className="lp-mockup-verdict-text">
+                  <strong>False claim detected.</strong> Cross-referenced with EU AI Act and recent legislative texts. The bill imposes restrictions on high-risk use cases, not parameter sizes, and open-source models are explicitly granted safe harbor exemptions.
+                  <div style={{ marginTop: '12px' }} className="lp-mockup-sources">
+                    <span className="lp-mockup-source-chip">europa.eu/ai-act</span>
+                    <span className="lp-mockup-source-chip">reuters.com/tech</span>
+                    <span className="lp-mockup-source-chip">eff.org</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -102,28 +109,40 @@ export default function LandingPage() {
         <h2 className="lp-section-title">Built for the information war.</h2>
 
         <div className="lp-features-grid">
-          <div className="lp-feature-card">
-            <div className="lp-feature-icon">🧠</div>
-            <h3 className="lp-feature-title">Neural Knowledge Graph</h3>
-            <p className="lp-feature-desc">Utilizes advanced RAG to instantly cross-reference claims against a continuously updated vector database of verified multi-lingual sources and primary documents.</p>
-          </div>
-
-          <div className="lp-feature-card">
-            <div className="lp-feature-icon">👁️</div>
-            <h3 className="lp-feature-title">Deep Media Inspection</h3>
-            <p className="lp-feature-desc">Goes beyond text. Analyzes images and screenshots using embedded OCR computer vision models to extract and verify embedded claims instantly.</p>
-          </div>
-
-          <div className="lp-feature-card">
+          {/* Feature 1 */}
+          <div className="lp-feature-card" data-glow>
             <div className="lp-feature-icon">⚡</div>
-            <h3 className="lp-feature-title">Patient Zero Tracing</h3>
-            <p className="lp-feature-desc">Employs linguistic forensics and reverse-chronological search to map the propagation of a claim and identify its earliest known digital footprint.</p>
+            <h3 className="lp-feature-title">Real-Time Verification</h3>
+            <p className="lp-feature-desc">
+              Checks claims against millions of verified documents within milliseconds.
+            </p>
           </div>
 
-          <div className="lp-feature-card">
-            <div className="lp-feature-icon">🛡️</div>
-            <h3 className="lp-feature-title">Contextual Immunity</h3>
-            <p className="lp-feature-desc">Doesn't just output True/False. Generates comprehensive, nuanced context explaining why a claim is misleading, missing context, or factually accurate.</p>
+          {/* Feature 2 */}
+          <div className="lp-feature-card" data-glow>
+            <div className="lp-feature-icon">🔍</div>
+            <h3 className="lp-feature-title">Source Origin Tracing</h3>
+            <p className="lp-feature-desc">
+              Identifies “Patient 0” of a claim to uncover coordinated networks.
+            </p>
+          </div>
+
+          {/* Feature 3 */}
+          <div className="lp-feature-card" data-glow>
+            <div className="lp-feature-icon">🌐</div>
+            <h3 className="lp-feature-title">Cross-Lingual Matching</h3>
+            <p className="lp-feature-desc">
+              Detects misinformation translated across 9 major local dialects.
+            </p>
+          </div>
+
+          {/* Feature 4 */}
+          <div className="lp-feature-card" data-glow>
+            <div className="lp-feature-icon">📊</div>
+            <h3 className="lp-feature-title">Entity Trust Scoring</h3>
+            <p className="lp-feature-desc">
+              Evaluates the reliability of authors based on historically verified data.
+            </p>
           </div>
         </div>
       </section>
@@ -134,20 +153,20 @@ export default function LandingPage() {
         <h2 className="lp-section-title">Surgical verification.</h2>
 
         <div className="lp-steps">
-          <div className="lp-step">
+          <div className="lp-step" data-glow>
             <div className="lp-step-num">1</div>
-            <h3 className="lp-step-title">Ingest</h3>
-            <p className="lp-step-desc">Paste a URL, drop a screenshot, or type a claim. The engine normalizes the input across languages.</p>
+            <div className="lp-step-title">Ingestion & Extraction</div>
+            <div className="lp-step-desc">Text is scanned to extract core empirical claims using our Llama-3 extraction pipeline.</div>
           </div>
-          <div className="lp-step">
+          <div className="lp-step" data-glow>
             <div className="lp-step-num">2</div>
-            <h3 className="lp-step-title">Retrieve</h3>
-            <p className="lp-step-desc">Parallel agents query live news APIs, fact-check databases, and our proprietary vector index.</p>
+            <div className="lp-step-title">RAG Cross-Reference</div>
+            <div className="lp-step-desc">The engine performs dense retrieval against trusted indices and DuckDuckGo news streams.</div>
           </div>
-          <div className="lp-step">
+          <div className="lp-step" data-glow>
             <div className="lp-step-num">3</div>
-            <h3 className="lp-step-title">Synthesize</h3>
-            <p className="lp-step-desc">A specialized LLM analyzes evidence coherence, formulates a verdict, and outputs cited reality.</p>
+            <div className="lp-step-title">Verdict Synthesis</div>
+            <div className="lp-step-desc">An aggregate score is formulated, tracing origin nodes and generating a report.</div>
           </div>
         </div>
       </section>
@@ -156,14 +175,14 @@ export default function LandingPage() {
       <section className="lp-final-cta">
         <h2 className="lp-final-cta-title">Upgrade your reality.</h2>
         <p className="lp-final-cta-sub">
-          Stop guessing. Start knowing. Join the researchers, journalists, and truth-seekers relying on Alithia's neural verification engine.
+          Stop guessing. Start knowing. Join the researchers, journalists, and truth-seekers relying on Alithia&apos;s neural verification engine.
         </p>
-        <Link href="/app" className="lp-cta-primary">
+        <LiquidButton size="lg" className="text-white" onClick={() => router.push('/app')}>
           Launch Alithia App
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14M12 5l7 7-7 7" />
           </svg>
-        </Link>
+        </LiquidButton>
       </section>
 
       {/* Footer */}

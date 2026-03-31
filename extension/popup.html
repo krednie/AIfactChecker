@@ -97,7 +97,7 @@
         </button>
       </div>
       <!-- Primary CTA — red interactive glass button -->
-      <button id="btn-analyze" class="analyze-btn" disabled>
+      <button id="btn-analyze" class="liquid-btn primary" disabled>
         Analyze
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </button>
@@ -165,8 +165,10 @@
       </div>
       <div class="results-header-row">
         <span id="results-meta" class="results-meta"></span>
-        <!-- Glass capsule back button — glassEffectInteractiveIOS26(in: Capsule()) -->
-        <button id="btn-back" class="back-btn">
+        <button id="btn-export-json" class="ghost-btn compact hidden">Export JSON</button>
+        <button id="btn-export-csv" class="ghost-btn compact hidden">Export CSV</button>
+        <!-- Glass capsule back button -->
+        <button id="btn-back" class="liquid-btn back-btn">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
           New
         </button>
@@ -183,6 +185,8 @@
         <span id="score-num" class="score-num">—</span>
       </div>
     </div>
+
+    <div id="analytics-panel" class="analytics-panel hidden"></div>
 
     <!-- Pills nav -->
     <div id="claims-nav" class="claims-nav"></div>
@@ -209,9 +213,22 @@
       </div>
       <p id="error-msg" class="error-msg">Something went wrong.</p>
       <!-- Interactive glass retry button -->
-      <button id="btn-retry" class="analyze-btn">Try Again</button>
+      <button id="btn-retry" class="liquid-btn primary">Try Again</button>
     </div>
   </div>
+
+  <!-- Glass Filter SVG for Liquid Glass Buttons -->
+  <svg class="hidden" style="display:none">
+    <defs>
+      <filter id="container-glass" x="0%" y="0%" width="100%" height="100%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.05 0.05" numOctaves="1" seed="1" result="turbulence" />
+        <feGaussianBlur in="turbulence" stdDeviation="2" result="blurredNoise" />
+        <feDisplacementMap in="SourceGraphic" in2="blurredNoise" scale="70" xChannelSelector="R" yChannelSelector="B" result="displaced" />
+        <feGaussianBlur in="displaced" stdDeviation="4" result="finalBlur" />
+        <feComposite in="finalBlur" in2="finalBlur" operator="over" />
+      </filter>
+    </defs>
+  </svg>
 
   <script src="popup.js"></script>
 </body>

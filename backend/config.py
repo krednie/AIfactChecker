@@ -47,6 +47,12 @@ class Settings:
     # ── Server ────────────────────────────────────────────────────────────
     BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8000"))
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    REDIS_ENABLED: bool = os.getenv("REDIS_ENABLED", "true").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+    REDIS_CACHE_TTL_SECONDS: int = int(os.getenv("REDIS_CACHE_TTL_SECONDS", "86400"))
+    REDIS_KEY_PREFIX: str = os.getenv("REDIS_KEY_PREFIX", "vcr:analysis:v1")
 
     # ── Trust tiers for re-ranking ────────────────────────────────────────
     TRUST_TIERS: dict = {

@@ -153,6 +153,7 @@ flowchart TD
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
+- Docker Desktop or another Docker runtime
 - API Keys: [Groq](https://console.groq.com/) (free), [Sarvam AI](https://dashboard.sarvam.ai/) (free tier), [Google Fact Check](https://developers.google.com/fact-check/tools/api) (free)
 
 ### Setup
@@ -169,21 +170,25 @@ python -m venv .venv
 # 3. Install Python dependencies
 pip install -r backend/requirements.txt
 
-# 4. Configure API keys
+# 4. Configure environment
 cp .env.example .env
 # Edit .env and fill in: GROQ_API_KEY, SARVAM_API_KEY, GOOGLE_FACT_CHECK_API_KEY
+# Redis defaults to redis://localhost:6379/0 for local development
 
-# 5. Verify keys are working
+# 5. Start local Redis
+docker compose up -d redis
+
+# 6. Verify keys are working
 python scripts/test_keys.py
 
-# 6. Build the fact-check corpus & FAISS index
+# 7. Build the fact-check corpus & FAISS index
 python -m backend.scraper        # Scrapes ~2,000 fact-check articles
 python scripts/build_index.py    # Builds FAISS vector index (~18MB)
 
-# 7. Start the backend
+# 8. Start the backend
 python -m backend.main           # → http://localhost:8000
 
-# 8. Start the frontend (new terminal)
+# 9. Start the frontend (new terminal)
 cd frontend && npm install && npm run dev    # → http://localhost:3000
 ```
 
@@ -235,7 +240,7 @@ curl -X POST http://localhost:8000/ocr \
 
 ### `GET /health` — Liveness Check
 
-Returns FAISS index status, corpus size, and OCR engine availability.
+Returns FAISS index status, OCR engine availability, and Redis connectivity.
 
 ---
 

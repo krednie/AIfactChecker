@@ -24,6 +24,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from backend.analytics import build_claim_analytics
 from backend.config import cfg
 from backend.retriever import Retriever, RetrievedChunk
 from backend.gdelt_search import gdelt_search
@@ -63,6 +64,7 @@ class VerificationResult:
     pipeline_trace: list[dict] = field(default_factory=list)
     sources: list[SourceChip] = field(default_factory=list)
     corpus_miss: bool = False
+    analytics: dict = field(default_factory=dict)
 
 
 # ── Prompts ───────────────────────────────────────────────────────────────── #
@@ -316,6 +318,12 @@ async def verify_claim(claim_data: dict) -> VerificationResult:
             corpus_miss=True,
             structured_query=claim_data,
             pipeline_trace=trace,
+            analytics=build_claim_analytics(
+                claim=claim,
+                chunks=[],
+                stance=Stance.UNCERTAIN,
+                confidence=Confidence.LOW,
+            ),
         )
 
     # Use the merged set for evidence
@@ -367,7 +375,13 @@ async def verify_claim(claim_data: dict) -> VerificationResult:
         structured_query=claim_data,
         pipeline_trace=trace,
         sources=sources,
-        corpus_miss=False,
+        corpus_miss=not corpus_hit,
+        analytics=build_claim_analytics(
+            claim=claim,
+            chunks=chunks,
+            stance=stance,
+            confidence=confidence,
+        ),
     )
 
 
@@ -390,7 +404,13 @@ async def verify_claims(claims: list[dict]) -> list[VerificationResult]:
                 sources=[],
                 corpus_miss=True,
                 structured_query=claim_data,
-                pipeline_trace=[{"step": "Verification", "status": "Internal Error", "state": "error"}]
+                pipeline_trace=[{"step": "Verification", "status": "Internal Error", "state": "error"}],
+                analytics=build_claim_analytics(
+                    claim=claim_str,
+                    chunks=[],
+                    stance=Stance.UNCERTAIN,
+                    confidence=Confidence.LOW,
+                ),
             ))
         else:
             verified.append(r)

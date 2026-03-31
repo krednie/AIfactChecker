@@ -7,6 +7,7 @@ const BACKEND = "http://localhost:8000";
 let currentFile = null;
 let lastText = "";
 let lastTab = "text";
+let lastAnalysisData = null;
 
 // ── DOM refs ──────────────────────────────────────────
 const views = {
@@ -34,11 +35,14 @@ const btnRetry = document.getElementById("btn-retry");
 const loadingLabel = document.getElementById("loading-label");
 const errorMsg = document.getElementById("error-msg");
 const resultsMeta = document.getElementById("results-meta");
+const btnExportJson = document.getElementById("btn-export-json");
+const btnExportCsv = document.getElementById("btn-export-csv");
 const claimsNav = document.getElementById("claims-nav");
 const claimsContainer = document.getElementById("claims-container");
 const sidebarScore = document.getElementById("sidebar-score");
 const scoreNum = document.getElementById("score-num");
 const scoreFill = document.getElementById("score-fill");
+const analyticsPanel = document.getElementById("analytics-panel");
 const grabBtns = document.getElementById("grab-btns");
 const trendingContainer = document.getElementById("trending-container");
 const trendingTime = document.getElementById("trending-time");
@@ -173,6 +177,9 @@ btnSel.addEventListener("click", async () => {
 btnAnalyze.addEventListener("click", runAnalysis);
 
 btnBack.addEventListener("click", () => {
+  lastAnalysisData = null;
+  if (btnExportJson) btnExportJson.classList.add("hidden");
+  if (btnExportCsv) btnExportCsv.classList.add("hidden");
   // Move trending back to idle view
   if (trendingContainer && !trendingContainer.classList.contains("hidden")) {
     views.idle.appendChild(trendingContainer);
@@ -189,6 +196,28 @@ btnRetry.addEventListener("click", () => {
     showView("idle");
   }
 });
+
+if (btnExportJson) {
+  btnExportJson.addEventListener("click", () => {
+    if (!lastAnalysisData) return;
+    downloadFile(
+      `alithia-report-${Date.now()}.json`,
+      JSON.stringify(lastAnalysisData, null, 2),
+      "application/json;charset=utf-8"
+    );
+  });
+}
+
+if (btnExportCsv) {
+  btnExportCsv.addEventListener("click", () => {
+    if (!lastAnalysisData) return;
+    downloadFile(
+      `alithia-report-${Date.now()}.csv`,
+      buildReportCsv(lastAnalysisData),
+      "text/csv;charset=utf-8"
+    );
+  });
+}
 
 const STEPS = ["Scanning claims…", "Searching corpus…", "Cross-referencing…", "Calibrating verdict…"];
 
@@ -257,11 +286,15 @@ async function runAnalysis() {
 
 // ── Render results ─────────────────────────────────────
 function renderResults(data) {
+  lastAnalysisData = data;
   const ms = data.processing_time_ms;
   resultsMeta.textContent = `${data.total_claims} claim${data.total_claims !== 1 ? "s" : ""} · ${ms}ms`;
 
+  if (btnExportJson) btnExportJson.classList.toggle("hidden", !data);
+  if (btnExportCsv) btnExportCsv.classList.toggle("hidden", !data);
   claimsNav.innerHTML = "";
   claimsContainer.innerHTML = "";
+  if (analyticsPanel) analyticsPanel.innerHTML = "";
 
   const score = accuracyScore(data.results);
   if (score !== null) {
@@ -271,6 +304,8 @@ function renderResults(data) {
   } else {
     sidebarScore.classList.add("hidden");
   }
+
+  renderAnalytics(data);
 
   if (!data.results.length) {
     claimsContainer.innerHTML = `<p style="text-align:center;color:var(--text-dim);font-size:12px;padding:30px;">No verifiable claims found.</p>`;
@@ -393,6 +428,76 @@ function buildVerdict(r, idx) {
   return card;
 }
 
+function renderAnalytics(data) {
+  if (!analyticsPanel) return;
+  const analytics = data.analytics || {};
+  const hasAnalytics =
+    analytics.claim_count ||
+    analytics.average_confidence_score ||
+    analytics.top_influencers?.length ||
+    analytics.dominant_narratives?.length;
+
+  analyticsPanel.classList.toggle("hidden", !hasAnalytics);
+  if (!hasAnalytics) return;
+
+  const stanceDistribution = analytics.stance_distribution || {};
+  const stanceTags = Object.entries(stanceDistribution)
+    .map(([label, count]) => `<span class="analytics-tag">${esc(label)}: ${count}</span>`)
+    .join("");
+  const narratives = (analytics.dominant_narratives || [])
+    .map(item => `<li>${esc(item)}</li>`)
+    .join("");
+  const influencers = (analytics.top_influencers || [])
+    .slice(0, 4)
+    .map(item => `
+      <a href="${item.url || "#"}" target="_blank" rel="noopener noreferrer" class="analytics-source">
+        <div class="analytics-source-copy">
+          <strong>${esc(item.domain || item.source || "source")}</strong>
+          <span>${esc((item.title || "").slice(0, 72))}${item.title?.length > 72 ? "…" : ""}</span>
+        </div>
+        <span class="analytics-weight">${Math.round((item.final_weight || 0) * 100)}</span>
+      </a>
+    `)
+    .join("");
+
+  analyticsPanel.innerHTML = `
+    <div class="analytics-card">
+      <div class="analytics-card-header">
+        <span class="analytics-eyebrow">Grounded Analytics</span>
+        <span class="analytics-chip">Deterministic</span>
+      </div>
+      <div class="analytics-metrics">
+        <div class="analytics-metric">
+          <strong>${Math.round((analytics.average_confidence_score || 0) * 100)}</strong>
+          <span>Agreement</span>
+        </div>
+        <div class="analytics-metric">
+          <strong>${Math.round((analytics.average_bias_index || 0) * 100)}</strong>
+          <span>Bias Index</span>
+        </div>
+        <div class="analytics-metric">
+          <strong>${analytics.claim_count || data.total_claims || 0}</strong>
+          <span>Claims</span>
+        </div>
+      </div>
+      <div class="analytics-row">
+        <div class="analytics-block">
+          <div class="analytics-block-title">Verdict Mix</div>
+          <div class="analytics-tags">${stanceTags || '<span class="analytics-tag">No data</span>'}</div>
+        </div>
+        <div class="analytics-block">
+          <div class="analytics-block-title">Top Influencers</div>
+          <div class="analytics-sources">${influencers || '<div class="analytics-empty">No ranked sources yet.</div>'}</div>
+        </div>
+      </div>
+      <div class="analytics-block">
+        <div class="analytics-block-title">Dominant Narratives</div>
+        <ul class="analytics-list">${narratives || "<li>No narrative clusters surfaced yet.</li>"}</ul>
+      </div>
+    </div>
+  `;
+}
+
 // ── Utilities ──────────────────────────────────────────
 function stanceClass(s) {
   if (!s) return "uncertain";
@@ -419,6 +524,54 @@ function esc(str) {
   const d = document.createElement("div");
   d.textContent = str || "";
   return d.innerHTML;
+}
+
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function buildReportCsv(data) {
+  const rows = [[
+    "claim",
+    "stance",
+    "confidence",
+    "reasoning",
+    "agreement_score",
+    "bias_index",
+    "dominant_narrative",
+    "top_source",
+  ]];
+
+  for (const result of data.results || []) {
+    const analytics = result.analytics || {};
+    const explainability = analytics.explainability || {};
+    const topSource = (analytics.weighted_sources || [])[0] || {};
+    rows.push([
+      result.claim || "",
+      result.stance || "",
+      result.confidence || "",
+      result.reasoning || "",
+      analytics.confidence_score ?? "",
+      analytics.bias_index ?? "",
+      explainability.dominant_narrative || "",
+      topSource.domain || topSource.source || "",
+    ]);
+  }
+
+  return rows.map(row => row.map(csvCell).join(",")).join("\n");
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 // ── Overlay toggle ─────────────────────────────────────
