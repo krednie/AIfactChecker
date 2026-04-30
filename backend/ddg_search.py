@@ -35,7 +35,7 @@ from backend.retriever import Chunk, RetrievedChunk
 # ── Constants ─────────────────────────────────────────────────────────────── #
 
 _DDG_URL = "https://html.duckduckgo.com/html/"
-_TIMEOUT = 20.0   # raised: Render cold-start + DDG latency needs headroom
+_TIMEOUT = 10.0   # lowered: prevents 40s wait parsing DDG timeouts (POST + GET)
 _MAX_RESULTS = 12
 _DEFAULT_SCORE = 999.0  # massively boosted per user request so DDG always ranks first
 _USER_AGENT = (
@@ -182,7 +182,7 @@ async def ddg_search(query: str, n: int = _MAX_RESULTS) -> list[RetrievedChunk]:
     try:
         parser.feed(html)
     except Exception as e:
-        logger.warning("DDG HTML parse error: {}", e)
+        logger.warning("DDG HTML parse error: {!r}", e)
         return []
 
     if not parser.results:
@@ -214,7 +214,7 @@ async def _fetch_ddg_html(query: str) -> str:
         except httpx.TimeoutException:
             logger.warning("DDG POST timed out for: {:.60s}…", query)
         except Exception as e:
-            logger.warning("DDG POST error: {} — trying GET fallback", e)
+            logger.warning("DDG POST error: {!r} — trying GET fallback", e)
 
         # --- Fallback: GET (some regions/IPs work better with GET) ---
         try:
@@ -228,7 +228,7 @@ async def _fetch_ddg_html(query: str) -> str:
         except httpx.TimeoutException:
             logger.warning("DDG GET timed out for: {:.60s}…", query)
         except Exception as e:
-            logger.warning("DDG GET error: {}", e)
+            logger.warning("DDG GET error: {!r}", e)
 
     return ""
 
